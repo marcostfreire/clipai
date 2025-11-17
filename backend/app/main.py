@@ -28,18 +28,11 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS middleware
+# CORS middleware - Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "https://frontend-xi-hazel-22.vercel.app",
-        "https://frontend-fsd91tr5z-marcostfreires-projects.vercel.app",
-        "https://*.vercel.app",  # Allow all Vercel preview deployments
-        "https://qh3hpqrnck8ila-8000.proxy.runpod.net",  # RunPod backend endpoint
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Must be False when using "*"
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
