@@ -49,16 +49,6 @@ async def add_cors_headers(request, call_next):
     response.headers["Access-Control-Max-Age"] = "600"
     return response
 
-# CORS middleware - Allow all origins for development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=False,  # Must be False when using "*"
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
 # Session middleware (required for OAuth)
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
 
