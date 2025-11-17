@@ -51,24 +51,28 @@ class AggressiveCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         """Ultra-aggressive CORS middleware that forces headers on EVERY response."""
         
+        # Get origin - use wildcard if not present
+        origin = request.headers.get("origin", "*")
+        
         # Handle preflight OPTIONS requests immediately
         if request.method == "OPTIONS":
-            logger.warning(f"⚠️ PREFLIGHT OPTIONS detected for {request.url.path}")
+            logger.warning(f"⚠️ PREFLIGHT OPTIONS detected for {request.url.path} from origin: {origin}")
             
-            response = Response(status_code=200)
-            
-            # Nuclear CORS headers - allow EVERYTHING
-            origin = request.headers.get("origin", "*")
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
-            response.headers["Access-Control-Allow-Headers"] = "*"
-            response.headers["Access-Control-Expose-Headers"] = "*"
-            response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
-            
-            # Additional headers to bypass proxies
-            response.headers["Vary"] = "Origin"
-            response.headers["X-Content-Type-Options"] = "nosniff"
+            # Create response with explicit headers
+            response = Response(
+                status_code=200,
+                content=b"",
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Expose-Headers": "*",
+                    "Access-Control-Max-Age": "86400",
+                    "Vary": "Origin",
+                    "X-Content-Type-Options": "nosniff",
+                }
+            )
             
             logger.info(f"✅ PREFLIGHT response headers: {dict(response.headers)}")
             return response
@@ -76,26 +80,40 @@ class AggressiveCORSMiddleware(BaseHTTPMiddleware):
         # Process the actual request
         response = await call_next(request)
         
-        # Force CORS headers on ALL responses (even if already set)
-        origin = request.headers.get("origin", "*")
+        # NUCLEAR OPTION: Recreate response with CORS headers baked in
+        # This ensures headers are present even if Cloudflare strips them
+        from starlette.responses import Response as StarletteResponse
         
-        # Set headers directly (overwrite if exists)
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        response.headers["Access-Control-Expose-Headers"] = "*"
-        response.headers["Vary"] = "Origin"
+        # Get response body
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
         
-        # Anti-caching for auth endpoints (force fresh responses)
+        # Create new response with forced headers
+        new_response = StarletteResponse(
+            content=body,
+            status_code=response.status_code,
+            headers={
+                **dict(response.headers),
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Expose-Headers": "*",
+                "Vary": "Origin",
+            },
+            media_type=response.headers.get("content-type"),
+        )
+        
+        # Anti-caching for auth endpoints
         if "/auth/" in request.url.path:
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
+            new_response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            new_response.headers["Pragma"] = "no-cache"
+            new_response.headers["Expires"] = "0"
         
         logger.debug(f"🔧 Forced CORS headers on response for {request.url.path}")
         
-        return response
+        return new_response
 
 # AGGRESSIVE CORS BYPASS STRATEGY - LAYER 3: Cloudflare-specific headers
 class CloudflareBypassMiddleware(BaseHTTPMiddleware):
