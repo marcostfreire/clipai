@@ -251,9 +251,14 @@ async def get_customer_portal(
             )
 
         # Create portal session
+        # Get base URL from oauth_redirect_uri or use default
+        base_url = "https://frontend-xi-hazel-22.vercel.app"
+        if settings.oauth_redirect_uri and "://" in settings.oauth_redirect_uri:
+            base_url = settings.oauth_redirect_uri.rsplit('/api', 1)[0]
+        
         portal_session = stripe.billing_portal.Session.create(
             customer=current_user.stripe_customer_id,
-            return_url=f"{settings.oauth_redirect_uri.rsplit('/api', 1)[0]}/videos",
+            return_url=f"{base_url}/videos",
         )
 
         return {"url": portal_session.url}
