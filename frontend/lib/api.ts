@@ -10,9 +10,18 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // AGGRESSIVE CORS & CLOUDFLARE BYPASS
+  timeout: 30000, // 30s timeout
+  withCredentials: false, // Don't send credentials to avoid CORS issues
 });
 
-// Add request interceptor to attach JWT token
+// Retry configuration for Cloudflare bypass
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1s
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Add request interceptor to attach JWT token and aggressive headers
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
@@ -21,10 +30,20 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+    
+    // AGGRESSIVE HEADERS to bypass Cloudflare
+    config.headers['Accept'] = 'application/json, text/plain, */*';
+    config.headers['X-Requested-With'] = 'XMLHttpRequest';
+    config.headers['Cache-Control'] = 'no-cache';
+    config.headers['Pragma'] = 'no-cache';
+    
     // Remove Content-Type header for FormData to let browser set it with boundary
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
+    
+    console.log(`🔵 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    
     return config;
   },
   (error) => {
@@ -32,15 +51,46 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle 401 errors
+// Add response interceptor with AGGRESSIVE RETRY LOGIC
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response) => {
+    console.log(`✅ API Response: ${response.status} ${response.config.url}`);
+    return response;
+  },
+  async (error) => {
+    const config = error.config;
+    
+    // Log the error
+    console.error(`❌ API Error: ${error.message}`, {
+      url: config?.url,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    
+    // Handle 401 errors
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      // Token expired or invalid, clear it
       localStorage.removeItem('access_token');
-      // Optionally redirect to login page
     }
+    
+    // AGGRESSIVE RETRY LOGIC for network errors or 5xx errors
+    if (!config || !config._retryCount) {
+      config._retryCount = 0;
+    }
+    
+    const shouldRetry = 
+      (!error.response || error.response.status >= 500 || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') &&
+      config._retryCount < MAX_RETRIES;
+    
+    if (shouldRetry) {
+      config._retryCount += 1;
+      const delay = RETRY_DELAY * config._retryCount; // Exponential backoff
+      
+      console.warn(`⚠️ Retrying request (${config._retryCount}/${MAX_RETRIES}) after ${delay}ms...`);
+      
+      await sleep(delay);
+      return api(config);
+    }
+    
     return Promise.reject(error);
   }
 );

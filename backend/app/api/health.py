@@ -2,10 +2,12 @@
 Health check endpoints and monitoring utilities.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 import redis
 import logging
+import datetime
 
 from ..config import settings
 from ..database import SessionLocal
@@ -62,3 +64,41 @@ async def liveness_check():
     Always returns 200 unless the application is completely dead.
     """
     return {"status": "alive", "service": "ClipAI API"}
+
+
+@router.get("/cors")
+async def cors_health_check(request: Request):
+    """CORS health check endpoint to validate headers are being sent correctly."""
+    logger.info(f"🔍 CORS Health Check - Origin: {request.headers.get('origin', 'none')}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "message": "CORS headers should be present",
+            "request_origin": request.headers.get("origin", "none"),
+            "request_method": request.method,
+            "timestamp": str(datetime.datetime.now()),
+        },
+        headers={
+            "X-CORS-Test": "success",
+            "X-Backend": "ClipAI-FastAPI",
+        }
+    )
+
+
+@router.options("/cors")
+async def cors_preflight(request: Request):
+    """Handle preflight OPTIONS for CORS health check."""
+    logger.info(f"✈️ CORS Preflight - Origin: {request.headers.get('origin', 'none')}")
+    
+    return JSONResponse(
+        content={"preflight": "ok"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "86400",
+        }
+    )

@@ -33,11 +33,17 @@ if settings.google_client_id and settings.google_client_secret:
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, db: Session = Depends(get_db)):
     """Register a new user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🔵 REGISTER attempt for email: {user_data.email}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
+        logger.warning(f"⚠️ Email already registered: {user_data.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
@@ -49,19 +55,29 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    logger.info(f"✅ User registered successfully: {new_user.email} (ID: {new_user.id})")
 
     return new_user
 
 
 @router.post("/login", response_model=Token)
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
 ):
     """Login and receive an access token."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🔵 LOGIN attempt for email: {form_data.username}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    
     # Find user by email (username field in OAuth2 form)
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"⚠️ Failed login attempt for: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -70,6 +86,7 @@ async def login(
 
     # Create access token
     access_token = create_access_token(data={"sub": user.email})
+    logger.info(f"✅ User logged in successfully: {user.email} (ID: {user.id})")
 
     return {"access_token": access_token, "token_type": "bearer"}
 

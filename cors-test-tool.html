@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipAI - CORS Test Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .test-section h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log .success { color: #4ec9b0; }
+        .log .error { color: #f48771; }
+        .log .warning { color: #dcdcaa; }
+        .log .info { color: #9cdcfe; }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.pending { background: #fff3cd; color: #856404; }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✂️ ClipAI CORS Test Tool</h1>
+        <p class="subtitle">Ferramenta de diagnóstico para validar correção CORS</p>
+
+        <div class="test-section">
+            <h2>🔧 Configuração</h2>
+            <label for="apiUrl">API Base URL:</label>
+            <input type="text" id="apiUrl" value="https://qh3hpqrnck8ila-8000.proxy.runpod.net" placeholder="https://qh3hpqrnck8ila-8000.proxy.runpod.net">
+        </div>
+
+        <div class="test-section">
+            <h2>1️⃣ Basic Health Check</h2>
+            <button onclick="testBasicHealth()">🏥 Test /health</button>
+            <span id="status-basic" class="status pending">Aguardando</span>
+            <div id="log-basic" class="log" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2️⃣ CORS Health Check</h2>
+            <button onclick="testCorsHealth()">🔍 Test /health/cors</button>
+            <span id="status-cors" class="status pending">Aguardando</span>
+            <div id="log-cors" class="log" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3️⃣ Preflight OPTIONS Test</h2>
+            <button onclick="testPreflight()">✈️ Test OPTIONS</button>
+            <span id="status-preflight" class="status pending">Aguardando</span>
+            <div id="log-preflight" class="log" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4️⃣ Auth Register Test</h2>
+            <input type="email" id="testEmail" placeholder="teste@exemplo.com" value="teste@exemplo.com">
+            <input type="password" id="testPassword" placeholder="senha123" value="senha123456">
+            <button onclick="testRegister()">📝 Test Register</button>
+            <button onclick="testLogin()">🔐 Test Login</button>
+            <span id="status-auth" class="status pending">Aguardando</span>
+            <div id="log-auth" class="log" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🧹 Utilitários</h2>
+            <button onclick="clearLogs()">🗑️ Limpar Logs</button>
+            <button onclick="runAllTests()">🚀 Executar Todos os Testes</button>
+        </div>
+    </div>
+
+    <script>
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value.replace(/\/$/, '');
+        }
+
+        function log(elementId, message, type = 'info') {
+            const logEl = document.getElementById(elementId);
+            logEl.style.display = 'block';
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+            logEl.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function setStatus(elementId, status) {
+            const statusEl = document.getElementById(elementId);
+            statusEl.className = 'status ' + status;
+            statusEl.textContent = status === 'success' ? '✅ Sucesso' : status === 'error' ? '❌ Falhou' : '⏳ Testando...';
+        }
+
+        async function testBasicHealth() {
+            const logId = 'log-basic';
+            const statusId = 'status-basic';
+            document.getElementById(logId).innerHTML = '';
+            setStatus(statusId, 'pending');
+            log(logId, '🔵 Testando /health endpoint...', 'info');
+
+            try {
+                const response = await fetch(`${getApiUrl()}/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+
+                log(logId, `Status: ${response.status} ${response.statusText}`, 'info');
+                log(logId, `Headers: ${JSON.stringify([...response.headers.entries()], null, 2)}`, 'info');
+
+                const data = await response.json();
+                log(logId, `Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                setStatus(statusId, 'success');
+            } catch (error) {
+                log(logId, `❌ Erro: ${error.message}`, 'error');
+                setStatus(statusId, 'error');
+            }
+        }
+
+        async function testCorsHealth() {
+            const logId = 'log-cors';
+            const statusId = 'status-cors';
+            document.getElementById(logId).innerHTML = '';
+            setStatus(statusId, 'pending');
+            log(logId, '🔍 Testando /health/cors endpoint...', 'info');
+            log(logId, `Origin: ${window.location.origin}`, 'info');
+
+            try {
+                const response = await fetch(`${getApiUrl()}/health/cors`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+
+                log(logId, `Status: ${response.status} ${response.statusText}`, 'info');
+                
+                // Verificar headers CORS
+                const corsHeaders = [
+                    'access-control-allow-origin',
+                    'access-control-allow-methods',
+                    'access-control-allow-headers',
+                    'access-control-max-age'
+                ];
+                
+                log(logId, '📋 CORS Headers:', 'info');
+                corsHeaders.forEach(header => {
+                    const value = response.headers.get(header);
+                    if (value) {
+                        log(logId, `  ✅ ${header}: ${value}`, 'success');
+                    } else {
+                        log(logId, `  ❌ ${header}: AUSENTE`, 'error');
+                    }
+                });
+
+                const data = await response.json();
+                log(logId, `Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                setStatus(statusId, 'success');
+            } catch (error) {
+                log(logId, `❌ Erro: ${error.message}`, 'error');
+                log(logId, `Isso pode indicar bloqueio CORS!`, 'error');
+                setStatus(statusId, 'error');
+            }
+        }
+
+        async function testPreflight() {
+            const logId = 'log-preflight';
+            const statusId = 'status-preflight';
+            document.getElementById(logId).innerHTML = '';
+            setStatus(statusId, 'pending');
+            log(logId, '✈️ Testando preflight OPTIONS...', 'info');
+
+            try {
+                const response = await fetch(`${getApiUrl()}/api/auth/register`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'content-type',
+                    }
+                });
+
+                log(logId, `Status: ${response.status} ${response.statusText}`, 'info');
+                log(logId, `Headers:`, 'info');
+                [...response.headers.entries()].forEach(([key, value]) => {
+                    log(logId, `  ${key}: ${value}`, 'info');
+                });
+
+                if (response.status === 200 && response.headers.get('access-control-allow-origin')) {
+                    log(logId, '✅ Preflight OK!', 'success');
+                    setStatus(statusId, 'success');
+                } else {
+                    log(logId, '⚠️ Preflight com problemas', 'warning');
+                    setStatus(statusId, 'error');
+                }
+            } catch (error) {
+                log(logId, `❌ Erro: ${error.message}`, 'error');
+                setStatus(statusId, 'error');
+            }
+        }
+
+        async function testRegister() {
+            const logId = 'log-auth';
+            const statusId = 'status-auth';
+            document.getElementById(logId).innerHTML = '';
+            setStatus(statusId, 'pending');
+            
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            
+            log(logId, `📝 Testando registro: ${email}`, 'info');
+
+            try {
+                const response = await fetch(`${getApiUrl()}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                log(logId, `Status: ${response.status} ${response.statusText}`, 'info');
+                
+                const data = await response.json();
+                log(logId, `Response: ${JSON.stringify(data, null, 2)}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    log(logId, '✅ Registro concluído!', 'success');
+                    setStatus(statusId, 'success');
+                } else {
+                    log(logId, '⚠️ Registro falhou', 'warning');
+                    setStatus(statusId, 'error');
+                }
+            } catch (error) {
+                log(logId, `❌ Erro: ${error.message}`, 'error');
+                log(logId, `Verifique se CORS está bloqueando`, 'error');
+                setStatus(statusId, 'error');
+            }
+        }
+
+        async function testLogin() {
+            const logId = 'log-auth';
+            const statusId = 'status-auth';
+            document.getElementById(logId).innerHTML = '';
+            setStatus(statusId, 'pending');
+            
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            
+            log(logId, `🔐 Testando login: ${email}`, 'info');
+
+            try {
+                const formData = new FormData();
+                formData.append('username', email);
+                formData.append('password', password);
+
+                const response = await fetch(`${getApiUrl()}/api/auth/login`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                log(logId, `Status: ${response.status} ${response.statusText}`, 'info');
+                
+                const data = await response.json();
+                log(logId, `Response: ${JSON.stringify(data, null, 2)}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    log(logId, '✅ Login concluído!', 'success');
+                    setStatus(statusId, 'success');
+                } else {
+                    log(logId, '⚠️ Login falhou', 'warning');
+                    setStatus(statusId, 'error');
+                }
+            } catch (error) {
+                log(logId, `❌ Erro: ${error.message}`, 'error');
+                setStatus(statusId, 'error');
+            }
+        }
+
+        function clearLogs() {
+            ['log-basic', 'log-cors', 'log-preflight', 'log-auth'].forEach(id => {
+                document.getElementById(id).innerHTML = '';
+                document.getElementById(id).style.display = 'none';
+            });
+            ['status-basic', 'status-cors', 'status-preflight', 'status-auth'].forEach(id => {
+                setStatus(id.replace('status-', 'status-'), 'pending');
+            });
+        }
+
+        async function runAllTests() {
+            clearLogs();
+            await testBasicHealth();
+            await new Promise(r => setTimeout(r, 1000));
+            await testCorsHealth();
+            await new Promise(r => setTimeout(r, 1000));
+            await testPreflight();
+        }
+    </script>
+</body>
+</html>

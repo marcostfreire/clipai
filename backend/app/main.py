@@ -1,20 +1,22 @@
 """Main FastAPI application."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import os
+import time
 
 from .config import settings
 from .database import init_db
 from .api import videos, clips, health, auth, subscriptions, webhooks
 
-# Configure logging
+# Configure logging with more detail
 logging.basicConfig(
-    level=logging.INFO if not settings.debug else logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG,  # Force DEBUG to see all headers
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
 )
 
 logger = logging.getLogger(__name__)
@@ -28,26 +30,93 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Add CORS headers to all responses FIRST (workaround for proxy stripping headers)
-@app.middleware("http")
-async def add_cors_headers(request, call_next):
-    """Add CORS headers to all responses - must be first middleware."""
-    # Handle OPTIONS request
-    if request.method == "OPTIONS":
-        response = JSONResponse(content={})
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        response.headers["Access-Control-Max-Age"] = "600"
+# AGGRESSIVE CORS BYPASS STRATEGY - LAYER 1: Log ALL requests
+class RequestLoggerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        logger.info(f"🔵 Incoming {request.method} {request.url.path}")
+        logger.debug(f"Headers: {dict(request.headers)}")
+        logger.debug(f"Client: {request.client}")
+        
+        response = await call_next(request)
+        
+        process_time = time.time() - start_time
+        logger.info(f"🟢 Response {response.status_code} for {request.method} {request.url.path} ({process_time:.3f}s)")
+        logger.debug(f"Response Headers: {dict(response.headers)}")
+        
         return response
-    
-    # Process request and add CORS headers to response
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "600"
-    return response
+
+# AGGRESSIVE CORS BYPASS STRATEGY - LAYER 2: Nuclear CORS headers
+class AggressiveCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        """Ultra-aggressive CORS middleware that forces headers on EVERY response."""
+        
+        # Handle preflight OPTIONS requests immediately
+        if request.method == "OPTIONS":
+            logger.warning(f"⚠️ PREFLIGHT OPTIONS detected for {request.url.path}")
+            
+            response = Response(status_code=200)
+            
+            # Nuclear CORS headers - allow EVERYTHING
+            origin = request.headers.get("origin", "*")
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Expose-Headers"] = "*"
+            response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
+            
+            # Additional headers to bypass proxies
+            response.headers["Vary"] = "Origin"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            
+            logger.info(f"✅ PREFLIGHT response headers: {dict(response.headers)}")
+            return response
+        
+        # Process the actual request
+        response = await call_next(request)
+        
+        # Force CORS headers on ALL responses (even if already set)
+        origin = request.headers.get("origin", "*")
+        
+        # Set headers directly (overwrite if exists)
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Expose-Headers"] = "*"
+        response.headers["Vary"] = "Origin"
+        
+        # Anti-caching for auth endpoints (force fresh responses)
+        if "/auth/" in request.url.path:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        
+        logger.debug(f"🔧 Forced CORS headers on response for {request.url.path}")
+        
+        return response
+
+# AGGRESSIVE CORS BYPASS STRATEGY - LAYER 3: Cloudflare-specific headers
+class CloudflareBypassMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        """Add headers specifically to bypass Cloudflare filtering."""
+        response = await call_next(request)
+        
+        # Tell Cloudflare to preserve headers
+        response.headers["CF-Cache-Status"] = "DYNAMIC"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        
+        # Force content type
+        if "application/json" in str(response.headers.get("content-type", "")):
+            response.headers["Content-Type"] = "application/json; charset=utf-8"
+        
+        return response
+
+# Apply middlewares in strategic order
+app.add_middleware(RequestLoggerMiddleware)
+app.add_middleware(AggressiveCORSMiddleware)
+app.add_middleware(CloudflareBypassMiddleware)
 
 # Session middleware (required for OAuth)
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
