@@ -13,11 +13,12 @@ from .auth import get_current_user
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
-# Initialize Stripe
+# Initialize Stripe (optional - if not configured, endpoints will fail at runtime)
 if settings.stripe_secret_key:
     stripe.api_key = settings.stripe_secret_key
+    STRIPE_ENABLED = True
 else:
-    raise ValueError("STRIPE_SECRET_KEY not configured")
+    STRIPE_ENABLED = False
 
 
 class CreateCheckoutRequest(BaseModel):
@@ -56,6 +57,12 @@ async def create_checkout_session(
     This endpoint creates a Stripe Checkout session and returns the URL
     to redirect the user to complete payment.
     """
+    if not STRIPE_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is not configured",
+        )
+    
     try:
         # Create or retrieve Stripe customer
         if not current_user.stripe_customer_id:
