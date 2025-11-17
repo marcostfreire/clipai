@@ -14,7 +14,7 @@ build/
 backend/storage/
 project/
 videotest.mp4
-
+info.md
 # Node
 node_modules/
 .next/
@@ -63,3 +63,4 @@ htmlcov/
 # OS
 Thumbs.db
 .DS_Store
+.vercel

@@ -31,7 +31,15 @@ const withCorsHeaders = (headers: Headers, origin?: string, request?: NextReques
     return headers;
 };
 
-const proxyRequest = async (req: NextRequest, params: { path?: string[] }) => {
+type RouteParams = { path?: string[] };
+type RouteContext = { params: RouteParams } | { params: Promise<RouteParams> };
+
+const resolveParams = async (context: RouteContext): Promise<RouteParams> => {
+    const value = context.params;
+    return value instanceof Promise ? await value : value;
+};
+
+const proxyRequest = async (req: NextRequest, params: RouteParams) => {
     if (!targetBase) {
         return new Response(
             JSON.stringify({ error: 'RUNPOD_DIRECT_API_URL is not configured' }),
@@ -101,22 +109,22 @@ export async function OPTIONS(req: NextRequest) {
     });
 }
 
-export async function GET(req: NextRequest, context: { params: { path?: string[] } }) {
-    return proxyRequest(req, context.params);
+export async function GET(req: NextRequest, context: RouteContext) {
+    return proxyRequest(req, await resolveParams(context));
 }
 
-export async function POST(req: NextRequest, context: { params: { path?: string[] } }) {
-    return proxyRequest(req, context.params);
+export async function POST(req: NextRequest, context: RouteContext) {
+    return proxyRequest(req, await resolveParams(context));
 }
 
-export async function PUT(req: NextRequest, context: { params: { path?: string[] } }) {
-    return proxyRequest(req, context.params);
+export async function PUT(req: NextRequest, context: RouteContext) {
+    return proxyRequest(req, await resolveParams(context));
 }
 
-export async function PATCH(req: NextRequest, context: { params: { path?: string[] } }) {
-    return proxyRequest(req, context.params);
+export async function PATCH(req: NextRequest, context: RouteContext) {
+    return proxyRequest(req, await resolveParams(context));
 }
 
-export async function DELETE(req: NextRequest, context: { params: { path?: string[] } }) {
-    return proxyRequest(req, context.params);
+export async function DELETE(req: NextRequest, context: RouteContext) {
+    return proxyRequest(req, await resolveParams(context));
 }
