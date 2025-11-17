@@ -79,3 +79,4 @@ npm run build        # Build produção
 npm start            # Servidor produção
 npm run lint         # ESLint
 ```
+# Deployment trigger
