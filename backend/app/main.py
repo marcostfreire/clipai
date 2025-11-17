@@ -28,6 +28,27 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Add CORS headers to all responses FIRST (workaround for proxy stripping headers)
+@app.middleware("http")
+async def add_cors_headers(request, call_next):
+    """Add CORS headers to all responses - must be first middleware."""
+    # Handle OPTIONS request
+    if request.method == "OPTIONS":
+        response = JSONResponse(content={})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Max-Age"] = "600"
+        return response
+    
+    # Process request and add CORS headers to response
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
 # CORS middleware - Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
@@ -40,18 +61,6 @@ app.add_middleware(
 
 # Session middleware (required for OAuth)
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret)
-
-
-# Add CORS headers to all responses (workaround for proxy stripping headers)
-@app.middleware("http")
-async def add_cors_headers(request, call_next):
-    """Add CORS headers to all responses."""
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "600"
-    return response
 
 
 @app.on_event("startup")
