@@ -35,6 +35,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:8000",
         "https://frontend-xi-hazel-22.vercel.app",
+        "https://frontend-fsd91tr5z-marcostfreires-projects.vercel.app",
         "https://*.vercel.app",  # Allow all Vercel preview deployments
         "https://qh3hpqrnck8ila-8000.proxy.runpod.net",  # RunPod backend endpoint
     ],
