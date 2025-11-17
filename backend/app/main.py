@@ -9,7 +9,7 @@ import os
 
 from .config import settings
 from .database import init_db
-from .api import videos, clips, health, auth
+from .api import videos, clips, health, auth, subscriptions, webhooks
 
 # Configure logging
 logging.basicConfig(
@@ -36,7 +36,7 @@ app.add_middleware(
         "http://localhost:8000",
         "https://frontend-xi-hazel-22.vercel.app",
         "https://*.vercel.app",  # Allow all Vercel preview deployments
-        "https://gh3hpqrrnck8ila-8000.proxy.runpod.net",  # New RunPod endpoint
+        "https://qh3hpqrnck8ila-8000.proxy.runpod.net",  # RunPod backend endpoint
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -105,10 +105,12 @@ async def global_exception_handler(request, exc):
 
 # Include routers
 app.include_router(health.router)
+app.include_router(webhooks.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(videos.router, prefix="/api")
 app.include_router(clips.router, prefix="/api")
 app.include_router(clips.clips_router, prefix="/api")
+app.include_router(subscriptions.router, prefix="/api")
 
 
 if __name__ == "__main__":

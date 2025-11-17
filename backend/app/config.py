@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = None
     stripe_publishable_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
+    stripe_price_free: Optional[str] = None  # price_xxx
     stripe_price_starter: Optional[str] = None  # price_xxx
     stripe_price_pro: Optional[str] = None  # price_xxx
 
