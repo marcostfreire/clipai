@@ -24,7 +24,10 @@ npm install
 
 # Configurar variáveis de ambiente
 cp .env.local .env.local
-# Edite .env.local: NEXT_PUBLIC_API_URL=http://localhost:8000/api
+# Edite .env.local:
+# NEXT_PUBLIC_API_URL=http://localhost:8000/api        # usado somente se o proxy for desativado
+# NEXT_PUBLIC_USE_EDGE_PROXY=true                      # encaminha tudo via /api/proxy
+# RUNPOD_DIRECT_API_URL=http://localhost:8000/api      # destino real do backend (localhost, direct.runpod, etc.)
 
 # Executar desenvolvimento
 npm run dev
@@ -56,6 +59,18 @@ frontend/
 3. **Clips**: Grid com clips gerados
 4. **Player**: Visualização individual
 
+## 🔐 Proxy Anti-CORS
+
+1. As chamadas do browser vão para `https://<frontend>/api/proxy/*`.
+2. O handler em `app/api/proxy/[[...path]]/route.ts` reenvia para o valor de `RUNPOD_DIRECT_API_URL` e adiciona os headers `Access-Control-Allow-*`.
+3. Para testar manualmente:
+	 ```powershell
+	 curl -X OPTIONS https://localhost:3000/api/proxy/health/cors ^
+		 -H "Origin: https://frontend-xi-hazel-22.vercel.app" ^
+		 -H "Access-Control-Request-Method: POST" -v
+	 ```
+4. Caso precise de um proxy 100% Cloudflare, use `frontend/workers/cloudflare-cors-proxy.js` e aponte `NEXT_PUBLIC_API_URL` para a URL do Worker.
+
 ## 🚀 Deploy
 
 ### Vercel
@@ -69,7 +84,11 @@ vercel
 railway up
 ```
 
-Configure `NEXT_PUBLIC_API_URL` nas variáveis de ambiente.
+Configure as variáveis a seguir no provider (Vercel, Render, etc.):
+
+- `NEXT_PUBLIC_USE_EDGE_PROXY=true`
+- `RUNPOD_DIRECT_API_URL=https://<pod-id>-8000.direct.runpod.net/api`
+- `NEXT_PUBLIC_API_URL` só é necessário se quiser ignorar o proxy (ex.: builds locais)
 
 ## 📝 Scripts
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Check, Zap, Rocket, Star } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/api';
 
 interface PricingTier {
   id: string;
@@ -125,7 +126,7 @@ export default function PricingPage() {
     try {
       // Call backend to create checkout session
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/subscriptions/create-checkout`,
+        `${API_BASE_URL}/subscriptions/create-checkout`,
         {
           method: 'POST',
           headers: {

@@ -3,10 +3,16 @@
  */
 import axios, { AxiosProgressEvent } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const EDGE_PROXY_PATH = '/api/proxy';
+const nextPublicApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const useEdgeProxy = process.env.NEXT_PUBLIC_USE_EDGE_PROXY !== 'false';
+
+export const API_BASE_URL = useEdgeProxy
+  ? EDGE_PROXY_PATH
+  : nextPublicApiUrl || EDGE_PROXY_PATH;
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -204,14 +210,14 @@ export async function getVideoClips(
  * Get clip download URL
  */
 export function getClipDownloadUrl(clipId: string): string {
-  return `${API_URL}/clips/${clipId}/download`;
+  return `${API_BASE_URL}/clips/${clipId}/download`;
 }
 
 /**
  * Get clip thumbnail URL
  */
 export function getClipThumbnailUrl(clipId: string): string {
-  return `${API_URL}/clips/${clipId}/thumbnail`;
+  return `${API_BASE_URL}/clips/${clipId}/thumbnail`;
 }
 
 /**
