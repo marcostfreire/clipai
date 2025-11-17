@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    env_file:
+      - ./backend/.env
+    volumes:
+      - video_storage:/app/storage
+    ports:
+      - "8000:8000"
+    networks:
+      - clipai_network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+      target: production
+    env_file:
+      - ./backend/.env
+    volumes:
+      - video_storage:/app/storage
+    networks:
+      - clipai_network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - clipai_network
+    restart: unless-stopped
+
+volumes:
+  video_storage:
+    driver: local
+
+networks:
+  clipai_network:
+    driver: bridge
