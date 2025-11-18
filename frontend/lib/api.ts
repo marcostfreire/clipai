@@ -148,7 +148,7 @@ export async function uploadVideo(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<VideoUploadResponse> {
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks to avoid proxy limits
+  const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks (Vercel proxy limit is 4.5MB)
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   
   // If file is small enough, use regular upload
