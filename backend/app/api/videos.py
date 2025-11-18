@@ -249,7 +249,8 @@ async def complete_chunked_upload(
         
         # Get video info
         ffmpeg = FFmpegService()
-        duration = ffmpeg.get_video_duration(file_path)
+        video_info = ffmpeg.get_video_info(file_path)
+        duration = video_info.get('duration', 0)
         
         # Create database entry
         video = Video(
