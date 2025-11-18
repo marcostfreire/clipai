@@ -16,8 +16,8 @@ from ..database import get_db
 from ..models import User
 from ..schemas import TokenData
 
-# Password hashing context (bcrypt_sha256 avoids 72-byte password limit)
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # OAuth2 scheme for token extraction
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)

@@ -14,7 +14,7 @@ class UserCreate(BaseModel):
     """Request schema for user registration."""
 
     email: EmailStr
-    password: str = Field(min_length=8, max_length=100)
+    password: str = Field(min_length=8, max_length=72)
 
 
 class UserRead(BaseModel):
