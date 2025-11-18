@@ -179,6 +179,105 @@ async def upload_video(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+@router.post("/upload/chunk")
+async def upload_chunk(
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    upload_id: str = Form(...),
+    chunk: UploadFile = File(...),
+):
+    """Upload a single chunk of a video file."""
+    try:
+        # Create temp directory for this upload
+        temp_dir = os.path.join(settings.storage_path, ".chunks", upload_id)
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Save chunk
+        chunk_path = os.path.join(temp_dir, f"chunk_{chunk_index}")
+        with open(chunk_path, "wb") as f:
+            shutil.copyfileobj(chunk.file, f)
+        
+        logger.info(f"Chunk {chunk_index + 1}/{total_chunks} saved for {upload_id}")
+        
+        return {
+            "success": True,
+            "chunk_index": chunk_index,
+            "upload_id": upload_id
+        }
+    except Exception as e:
+        logger.error(f"Error uploading chunk: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload/complete", response_model=VideoUploadResponse)
+async def complete_chunked_upload(
+    upload_id: str = Form(...),
+    filename: str = Form(...),
+    total_chunks: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Combine all chunks into final video file."""
+    try:
+        temp_dir = os.path.join(settings.storage_path, ".chunks", upload_id)
+        
+        # Verify all chunks exist
+        for i in range(total_chunks):
+            chunk_path = os.path.join(temp_dir, f"chunk_{i}")
+            if not os.path.exists(chunk_path):
+                raise HTTPException(status_code=400, detail=f"Missing chunk {i}")
+        
+        # Generate video ID and create directory
+        import uuid
+        video_id = str(uuid.uuid4())
+        video_dir = os.path.join(settings.storage_path, video_id)
+        os.makedirs(video_dir, exist_ok=True)
+        
+        # Combine chunks
+        file_extension = Path(filename).suffix.lower()
+        file_path = os.path.join(video_dir, f"original{file_extension}")
+        
+        with open(file_path, "wb") as outfile:
+            for i in range(total_chunks):
+                chunk_path = os.path.join(temp_dir, f"chunk_{i}")
+                with open(chunk_path, "rb") as infile:
+                    shutil.copyfileobj(infile, outfile)
+        
+        # Clean up chunks
+        shutil.rmtree(temp_dir)
+        
+        # Get video info
+        ffmpeg = FFmpegService()
+        duration = ffmpeg.get_video_duration(file_path)
+        
+        # Create database entry
+        video = Video(
+            id=video_id,
+            filename=filename,
+            file_path=file_path,
+            duration=duration,
+            status="uploaded",
+            user_id=current_user.id if current_user else None,
+        )
+        db.add(video)
+        db.commit()
+        
+        logger.info(f"Chunked upload complete: {video_id}")
+        
+        return VideoUploadResponse(
+            video_id=video_id,
+            filename=filename,
+            duration=duration,
+            status="uploaded",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error completing chunked upload: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{video_id}/process", response_model=VideoProcessResponse)
 async def process_video(
     video_id: str,

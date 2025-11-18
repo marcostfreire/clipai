@@ -148,19 +148,62 @@ export async function uploadVideo(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<VideoUploadResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
+  const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  
+  // If file is small enough, use regular upload
+  if (file.size <= CHUNK_SIZE) {
+    const formData = new FormData();
+    formData.append('file', file);
 
-  const response = await api.post<VideoUploadResponse>('/videos/upload', formData, {
-    timeout: 600000, // 10 minutes for video upload
-    onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-      if (onProgress && progressEvent.total) {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / progressEvent.total
-        );
-        onProgress(percentCompleted);
-      }
-    },
+    const response = await api.post<VideoUploadResponse>('/videos/upload', formData, {
+      timeout: 600000, // 10 minutes for video upload
+      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          onProgress(percentCompleted);
+        }
+      },
+    });
+
+    return response.data;
+  }
+  
+  // Use chunked upload for large files
+  const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+    
+    const chunkFormData = new FormData();
+    chunkFormData.append('chunk', chunk);
+    chunkFormData.append('chunk_index', i.toString());
+    chunkFormData.append('total_chunks', totalChunks.toString());
+    chunkFormData.append('filename', file.name);
+    chunkFormData.append('upload_id', uploadId);
+    
+    await api.post('/videos/upload/chunk', chunkFormData, {
+      timeout: 120000, // 2 minutes per chunk
+    });
+    
+    if (onProgress) {
+      const progress = Math.round(((i + 1) / totalChunks) * 100);
+      onProgress(progress);
+    }
+  }
+  
+  // Complete upload
+  const completeFormData = new FormData();
+  completeFormData.append('upload_id', uploadId);
+  completeFormData.append('filename', file.name);
+  completeFormData.append('total_chunks', totalChunks.toString());
+  
+  const response = await api.post<VideoUploadResponse>('/videos/upload/complete', completeFormData, {
+    timeout: 120000,
   });
 
   return response.data;
