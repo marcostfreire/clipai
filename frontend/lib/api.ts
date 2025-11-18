@@ -17,7 +17,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   // AGGRESSIVE CORS & CLOUDFLARE BYPASS
-  timeout: 30000, // 30s timeout
+  timeout: 300000, // 5 minutes timeout for video uploads
   withCredentials: false, // Don't send credentials to avoid CORS issues
 });
 
@@ -152,6 +152,7 @@ export async function uploadVideo(
   formData.append('file', file);
 
   const response = await api.post<VideoUploadResponse>('/videos/upload', formData, {
+    timeout: 600000, // 10 minutes for video upload
     onUploadProgress: (progressEvent: AxiosProgressEvent) => {
       if (onProgress && progressEvent.total) {
         const percentCompleted = Math.round(
