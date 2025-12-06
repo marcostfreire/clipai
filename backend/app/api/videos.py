@@ -310,12 +310,17 @@ async def process_video(
         if video.status == "completed":
             raise HTTPException(status_code=400, detail="Video already processed")
 
-        # Queue processing task
+        # Queue processing task with custom parameters
         from ..tasks.celery_tasks import process_video_task
 
-        task = process_video_task.delay(video_id)
+        task = process_video_task.delay(
+            video_id,
+            clip_min_duration=request.clip_duration_min,
+            clip_max_duration=request.clip_duration_max,
+            min_virality_score=request.min_score,
+        )
 
-        logger.info(f"[VIDEO:{video_id}] Processing task queued: {task.id}")
+        logger.info(f"[VIDEO:{video_id}] Processing task queued: {task.id} (min={request.clip_duration_min}s, max={request.clip_duration_max}s, score>={request.min_score})")
 
         return VideoProcessResponse(job_id=task.id, video_id=video_id, status="queued")
 

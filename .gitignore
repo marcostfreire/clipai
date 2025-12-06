@@ -39,7 +39,7 @@ branding/
 # Storage
 storage/videos/*
 !storage/videos/.gitkeep
-
+project/
 # IDE
 .vscode/
 .idea/

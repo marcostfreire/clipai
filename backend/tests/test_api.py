@@ -85,10 +85,10 @@ class TestVideoEndpoints:
         response = client.post("/api/videos/upload")
         assert response.status_code == 422  # Validation error
 
-    def test_upload_video_url_invalid(self, client):
-        """Test upload with invalid URL."""
+    def test_upload_video_with_invalid_url(self, client):
+        """Test upload with invalid YouTube URL via form field."""
         response = client.post(
-            "/api/videos/upload-url", json={"url": "not_a_valid_url"}
+            "/api/videos/upload", data={"url": "not_a_valid_url"}
         )
         assert response.status_code in [400, 422]
 

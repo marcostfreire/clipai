@@ -47,8 +47,7 @@ npm run build
 backend/tests/
 ├── conftest.py              # Test configuration
 ├── test_api.py              # API endpoint tests
-├── test_ffmpeg_service.py   # FFmpeg service tests
-└── test_gemini_service.py   # Gemini AI service tests
+└── test_ffmpeg_service.py   # FFmpeg service tests
 ```
 
 ## Test Coverage
@@ -57,7 +56,6 @@ Target coverage: 80%+
 
 Current coverage:
 - FFmpeg Service: ~85%
-- Gemini Service: ~80%
 - API Endpoints: ~75%
 
 ## Writing Tests

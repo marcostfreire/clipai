@@ -41,16 +41,30 @@ celery_app.conf.update(
 
 
 @celery_app.task(bind=True, name="process_video_task")
-def process_video_task(self, video_id: str) -> dict:
+def process_video_task(
+    self,
+    video_id: str,
+    clip_min_duration: int = None,
+    clip_max_duration: int = None,
+    min_virality_score: float = None,
+) -> dict:
     """
     Process video and generate clips.
 
     Args:
         video_id: Video ID to process
+        clip_min_duration: Minimum clip duration (uses settings default if None)
+        clip_max_duration: Maximum clip duration (uses settings default if None)
+        min_virality_score: Minimum virality score threshold (uses settings default if None)
 
     Returns:
         Dictionary with processing results
     """
+    # Use provided values or fall back to settings defaults
+    clip_min = clip_min_duration if clip_min_duration is not None else settings.clip_min_duration
+    clip_max = clip_max_duration if clip_max_duration is not None else settings.clip_max_duration
+    min_score = min_virality_score if min_virality_score is not None else settings.min_virality_score
+
     db: Session = SessionLocal()
 
     try:
@@ -75,16 +89,17 @@ def process_video_task(self, video_id: str) -> dict:
         )
         whisper_service = WhisperService(model_name="base")
 
-        # Initialize processor
+        # Initialize processor with custom or default parameters
+        logger.info(f"[VIDEO:{video_id}] Using params: min_duration={clip_min}s, max_duration={clip_max}s, min_score={min_score}")
         processor = VideoProcessor(
             ffmpeg_service=ffmpeg_service,
             ai_service=ai_service,
             whisper_service=whisper_service,
             storage_path=settings.storage_path,
             frames_per_second=settings.frames_per_second,
-            clip_min_duration=settings.clip_min_duration,
-            clip_max_duration=settings.clip_max_duration,
-            min_virality_score=settings.min_virality_score,
+            clip_min_duration=clip_min,
+            clip_max_duration=clip_max,
+            min_virality_score=min_score,
             subtitle_delay_seconds=settings.subtitle_delay_seconds,
         )
 
