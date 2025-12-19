@@ -17,35 +17,48 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # Ollama AI Service (local Gemma 3 4B)
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:4b"
+    # Gemini AI Service
+    google_api_key: Optional[str] = None
+    gemini_model_default: str = "gemini-2.5-flash-lite"
+    gemini_model_strict: str = "gemini-2.5-flash"
 
-    # Storage
+    # Storage (use /data/videos on Railway for persistent disk)
     storage_path: str = "./storage/videos"
     max_video_size_mb: int = 500
     max_video_duration_sec: int = 3600
 
-    # Processing
-    frames_per_second: float = (
-        0.2  # Optimized: 1 frame every 5 seconds (was 0.33 = every 3s)
-    )
+    # Processing - optimized for Railway Hobby plan
+    frames_per_second: float = 0.1  # 1 frame every 10 seconds (optimized for cost/performance)
     clip_min_duration: int = 30
     clip_max_duration: int = 60
-    min_virality_score: float = 5.0  # Lowered to generate more clips
-    subtitle_delay_seconds: float = 0.0  # Default to real-time captions
+    min_virality_score: float = 5.0
+    subtitle_delay_seconds: float = 0.0
 
     # Performance optimization
-    ai_batch_size: int = 5  # Number of frames to process in a single Ollama request
+    ai_batch_size: int = 2  # Number of frames to process per batch (reduced for memory)
+    ai_timeout: int = 120  # Gemini API timeout in seconds
+    ai_max_retries: int = 3  # Max retries for API calls
+
+    # Whisper settings
+    whisper_model: str = "small"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
+
+    # FFmpeg optimization
+    ffmpeg_preset: str = "ultrafast"
+    ffmpeg_crf: int = 26
+    ffmpeg_audio_bitrate: str = "96k"
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
+    celery_worker_concurrency: int = 1
+    celery_worker_prefetch_multiplier: int = 1
 
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    debug: bool = True
+    debug: bool = False
 
     # JWT Authentication
     jwt_secret: str = "your-secret-key-change-in-production"
@@ -63,9 +76,15 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = None
     stripe_publishable_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
-    stripe_price_free: Optional[str] = None  # price_xxx
-    stripe_price_starter: Optional[str] = None  # price_xxx
-    stripe_price_pro: Optional[str] = None  # price_xxx
+    stripe_price_free: Optional[str] = None
+    stripe_price_starter: Optional[str] = None
+    stripe_price_pro: Optional[str] = None
+
+    # CORS
+    cors_origins: str = "*"
+
+    # Cleanup
+    cleanup_days_old: int = 7
 
 
 settings = Settings()

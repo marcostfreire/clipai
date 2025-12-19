@@ -236,7 +236,7 @@ export default function Home() {
           <div className="border-t pt-6 text-center text-sm text-muted-foreground">
             <p>© 2025 ClipAI. Código aberto sob MIT License.</p>
             <p className="mt-2">
-              Desenvolvido com Next.js, FastAPI e Gemma AI • Processamento local com Ollama
+              Desenvolvido com Next.js, FastAPI e Gemini AI
             </p>
           </div>
         </div>

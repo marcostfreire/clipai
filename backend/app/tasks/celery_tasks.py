@@ -13,13 +13,14 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import Video, Clip
 from app.services.ffmpeg_service import FFmpegService
-from app.services.ollama_service import OllamaService
+from app.services.gemini_service import GeminiService
 from app.services.whisper_service import WhisperService
 from app.services.video_processor import VideoProcessor
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO if not settings.debug else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=3600,  # 1 hour max
     task_soft_time_limit=3300,  # 55 minutes soft limit
+    worker_concurrency=settings.celery_worker_concurrency,
+    worker_prefetch_multiplier=settings.celery_worker_prefetch_multiplier,
 )
 
 
@@ -81,13 +84,24 @@ def process_video_task(
         db.commit()
 
         # Initialize services
-        ffmpeg_service = FFmpegService()
-        ai_service = OllamaService(
-            base_url=settings.ollama_base_url,
-            model=settings.ollama_model,
-            batch_size=settings.ai_batch_size,
+        ffmpeg_service = FFmpegService(
+            preset=settings.ffmpeg_preset,
+            crf=settings.ffmpeg_crf,
+            audio_bitrate=settings.ffmpeg_audio_bitrate,
         )
-        whisper_service = WhisperService(model_name="base")
+        ai_service = GeminiService(
+            api_key=settings.google_api_key,
+            model_default=settings.gemini_model_default,
+            model_strict=settings.gemini_model_strict,
+            batch_size=settings.ai_batch_size,
+            timeout=settings.ai_timeout,
+            max_retries=settings.ai_max_retries,
+        )
+        whisper_service = WhisperService(
+            model_name=settings.whisper_model,
+            device=settings.whisper_device,
+            compute_type=settings.whisper_compute_type,
+        )
 
         # Initialize processor with custom or default parameters
         logger.info(f"[VIDEO:{video_id}] Using params: min_duration={clip_min}s, max_duration={clip_max}s, min_score={min_score}")

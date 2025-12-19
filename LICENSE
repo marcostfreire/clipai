@@ -39,7 +39,7 @@ This project uses the following open-source libraries:
 - **python-multipart** - Apache License 2.0
 - **aiofiles** - Apache License 2.0
 - **openai-whisper** - MIT License
-- **google-generativeai** - Apache License 2.0
+- **google-genai** - Apache License 2.0
 - **yt-dlp** - Unlicense
 
 ### Frontend Dependencies

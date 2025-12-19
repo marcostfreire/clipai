@@ -7,7 +7,7 @@ celery==5.5.3
 redis==7.0.1
 pydantic==2.12.4
 pydantic-settings==2.11.0
-python-multipart==0.0.20 
+python-multipart==0.0.20
 httpx==0.28.1
 faster-whisper==1.2.1
 python-jose[cryptography]==3.3.0
@@ -18,3 +18,4 @@ ffmpeg-python==0.2.0
 Pillow==12.0.0
 python-dotenv==1.2.1
 yt-dlp==2025.11.12
+google-genai==1.56.0

@@ -11,15 +11,18 @@ class WhisperService:
     """Service for audio transcription using Faster-Whisper."""
 
     def __init__(
-        self, model_name: str = "base", device: str = "cpu", compute_type: str = "int8"
+        self, model_name: str = "small", device: str = "cpu", compute_type: str = "int8"
     ):
         """
         Initialize Whisper service.
 
         Args:
             model_name: Whisper model to use (tiny, base, small, medium, large-v3)
+                       Default: small (good balance of speed/accuracy for Railway Hobby)
             device: Device to run on ("cpu" or "cuda")
+                   Default: cpu (Railway Hobby has no GPU)
             compute_type: Compute type ("int8", "float16", "int8_float16")
+                         Default: int8 (optimized for CPU, lower memory)
         """
         logger.info(
             f"Loading Faster-Whisper model: {model_name} on {device} with {compute_type}"

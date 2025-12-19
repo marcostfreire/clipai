@@ -13,13 +13,13 @@ class VideoProcessor:
     def __init__(
         self,
         ffmpeg_service,
-        ai_service,  # Ollama service
+        ai_service,  # GeminiService
         whisper_service,
         storage_path: str,
-        frames_per_second: float = 0.2,  # Optimized: 1 frame every 5 seconds
+        frames_per_second: float = 0.1,  # Optimized: 1 frame every 10 seconds
         clip_min_duration: int = 30,
         clip_max_duration: int = 60,
-        min_virality_score: float = 7.0,
+        min_virality_score: float = 5.0,
         subtitle_delay_seconds: float = 0.0,
     ):
         """
@@ -27,7 +27,7 @@ class VideoProcessor:
 
         Args:
             ffmpeg_service: FFmpeg service instance
-            ai_service: AI service instance (Ollama with Gemma)
+            ai_service: AI service instance (GeminiService)
             whisper_service: Whisper service instance
             storage_path: Base storage path
             frames_per_second: FPS for frame extraction

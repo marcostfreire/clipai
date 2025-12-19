@@ -12,10 +12,30 @@ logger = logging.getLogger(__name__)
 class FFmpegService:
     """Service for video processing using FFmpeg."""
 
-    def __init__(self):
-        """Initialize FFmpeg service."""
+    def __init__(
+        self,
+        preset: str = "ultrafast",
+        crf: int = 26,
+        audio_bitrate: str = "96k",
+    ):
+        """
+        Initialize FFmpeg service.
+
+        Args:
+            preset: Encoding preset (ultrafast, superfast, veryfast, faster, fast, medium, slow)
+                   Default: ultrafast (optimized for Railway Hobby CPU limits)
+            crf: Constant Rate Factor for quality (0-51, lower is better)
+                Default: 26 (good balance for social media clips)
+            audio_bitrate: Audio bitrate (e.g., "96k", "128k")
+                          Default: 96k (sufficient for voice content)
+        """
         self.ffmpeg_path = "ffmpeg"
         self.ffprobe_path = "ffprobe"
+        self.preset = preset
+        self.crf = crf
+        self.audio_bitrate = audio_bitrate
+        
+        logger.info(f"FFmpeg initialized with preset={preset}, crf={crf}, audio_bitrate={audio_bitrate}")
 
     def get_video_info(self, video_path: str) -> dict:
         """
@@ -249,13 +269,13 @@ class FFmpegService:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "medium",
+                self.preset,
                 "-crf",
-                "23",
+                str(self.crf),
                 "-c:a",
                 "aac",
                 "-b:a",
-                "128k",
+                self.audio_bitrate,
                 output_path,
             ]
 
@@ -299,9 +319,9 @@ class FFmpegService:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "medium",
+                self.preset,
                 "-crf",
-                "23",
+                str(self.crf),
                 "-c:a",
                 "copy",
                 output_path,
