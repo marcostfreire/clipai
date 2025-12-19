@@ -24,6 +24,7 @@ from ..services.subscription_service import (
     get_plan_limits,
     get_user_plan,
 )
+from ..services.storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,21 @@ async def upload_video(
                 )
 
         # Create database record
+        storage = get_storage_service()
+        
+        # Upload to R2 if configured
+        if storage.use_r2:
+            logger.info(f"[VIDEO:{video_id}] Uploading to R2")
+            r2_path = storage.upload_file(file_path, video_id, f"original{file_extension if file else '.mp4'}")
+            # Clean up local file after upload
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            # Clean up empty local directory
+            if os.path.exists(video_dir) and not os.listdir(video_dir):
+                os.rmdir(video_dir)
+            file_path = r2_path
+            logger.info(f"[VIDEO:{video_id}] Uploaded to R2: {r2_path}")
+
         video = Video(
             id=video_id,
             user_id=current_user.id if current_user else None,

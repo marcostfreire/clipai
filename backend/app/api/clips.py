@@ -1,7 +1,7 @@
 """Clips API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 import os
 import logging
@@ -9,6 +9,7 @@ import logging
 from ..database import get_db
 from ..models import Video, Clip
 from ..schemas import ClipResponse, ClipsListResponse
+from ..services.storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -127,13 +128,22 @@ async def download_clip(clip_id: str, db: Session = Depends(get_db)):
         db: Database session
 
     Returns:
-        Video file
+        Video file or redirect to R2 URL
     """
     try:
         clip = db.query(Clip).filter(Clip.id == clip_id).first()
         if not clip:
             raise HTTPException(status_code=404, detail="Clip not found")
 
+        storage = get_storage_service()
+        
+        # If using R2 and path is R2 URL, redirect to it
+        if storage.use_r2 and (clip.file_path.startswith("r2://") or (storage.r2_public_url and clip.file_path.startswith(storage.r2_public_url))):
+            # Get presigned or public URL
+            url = storage.get_presigned_url(clip.file_path, expires_in=3600)
+            return RedirectResponse(url=url, status_code=302)
+
+        # Local file
         if not os.path.exists(clip.file_path):
             raise HTTPException(status_code=404, detail="Clip file not found")
 
@@ -158,14 +168,25 @@ async def get_clip_thumbnail(clip_id: str, db: Session = Depends(get_db)):
         db: Database session
 
     Returns:
-        Thumbnail image
+        Thumbnail image or redirect to R2 URL
     """
     try:
         clip = db.query(Clip).filter(Clip.id == clip_id).first()
         if not clip:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        if not clip.thumbnail_path or not os.path.exists(clip.thumbnail_path):
+        if not clip.thumbnail_path:
+            raise HTTPException(status_code=404, detail="Thumbnail not found")
+
+        storage = get_storage_service()
+        
+        # If using R2 and path is R2 URL, redirect to it
+        if storage.use_r2 and (clip.thumbnail_path.startswith("r2://") or (storage.r2_public_url and clip.thumbnail_path.startswith(storage.r2_public_url))):
+            url = storage.get_presigned_url(clip.thumbnail_path, expires_in=3600)
+            return RedirectResponse(url=url, status_code=302)
+
+        # Local file
+        if not os.path.exists(clip.thumbnail_path):
             raise HTTPException(status_code=404, detail="Thumbnail not found")
 
         return FileResponse(clip.thumbnail_path, media_type="image/jpeg")

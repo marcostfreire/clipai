@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     stripe_price_starter: Optional[str] = None
     stripe_price_pro: Optional[str] = None
 
+    # Cloudflare R2 Storage
+    r2_account_id: Optional[str] = None
+    r2_access_key_id: Optional[str] = None
+    r2_secret_access_key: Optional[str] = None
+    r2_bucket_name: Optional[str] = None
+    r2_public_url: Optional[str] = None  # e.g., https://storage.yourdomain.com
+
     # CORS
     cors_origins: str = "*"
 

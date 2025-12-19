@@ -16,6 +16,7 @@ from app.services.ffmpeg_service import FFmpegService
 from app.services.gemini_service import GeminiService
 from app.services.whisper_service import WhisperService
 from app.services.video_processor import VideoProcessor
+from app.services.storage_service import get_storage_service
 
 # Configure logging
 logging.basicConfig(
@@ -83,6 +84,20 @@ def process_video_task(
         video.progress = 0
         db.commit()
 
+        # Initialize storage service
+        storage = get_storage_service()
+
+        # Download video from R2 if needed
+        video_path = video.file_path
+        if storage.use_r2 and (video_path.startswith("r2://") or (storage.r2_public_url and video_path.startswith(storage.r2_public_url))):
+            local_video_path = storage.get_local_path(video_id, "original.mp4")
+            logger.info(f"[VIDEO:{video_id}] Downloading from R2 to {local_video_path}")
+            video_path = storage.download_file(video.file_path, local_video_path)
+            logger.info(f"[VIDEO:{video_id}] Download completed")
+        else:
+            # Local file
+            local_video_path = video_path
+
         # Initialize services
         ffmpeg_service = FFmpegService(
             preset=settings.ffmpeg_preset,
@@ -132,9 +147,48 @@ def process_video_task(
         # Process video
         clips_metadata = processor.process_video(
             video_id=video_id,
-            video_path=video.file_path,
+            video_path=local_video_path,
             progress_callback=update_progress,
         )
+
+        # Upload clips to R2 if configured
+        if storage.use_r2:
+            logger.info(f"[VIDEO:{video_id}] Uploading clips to R2")
+            for clip_meta in clips_metadata:
+                # Upload video
+                if os.path.exists(clip_meta["file_path"]):
+                    r2_video_path = storage.upload_file(
+                        clip_meta["file_path"],
+                        video_id,
+                        os.path.basename(clip_meta["file_path"])
+                    )
+                    clip_meta["file_path"] = r2_video_path
+
+                # Upload thumbnail
+                if os.path.exists(clip_meta["thumbnail_path"]):
+                    r2_thumb_path = storage.upload_file(
+                        clip_meta["thumbnail_path"],
+                        video_id,
+                        os.path.basename(clip_meta["thumbnail_path"])
+                    )
+                    clip_meta["thumbnail_path"] = r2_thumb_path
+
+            # Upload original video too
+            if os.path.exists(local_video_path):
+                r2_original_path = storage.upload_file(
+                    local_video_path,
+                    video_id,
+                    "original.mp4"
+                )
+                video.file_path = r2_original_path
+                logger.info(f"[VIDEO:{video_id}] Original video uploaded to R2")
+
+            # Clean up local temp files
+            import shutil
+            local_video_dir = storage.get_local_path(video_id)
+            if os.path.exists(local_video_dir):
+                shutil.rmtree(local_video_dir)
+                logger.info(f"[VIDEO:{video_id}] Cleaned up local temp files")
 
         # Save clips to database
         for clip_meta in clips_metadata:
