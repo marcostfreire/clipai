@@ -40,7 +40,7 @@ export function ClipCard({ clip }: ClipCardProps) {
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-      <div className="relative aspect-[9/16] bg-muted">
+      <div className="relative aspect-9/16 bg-muted">
         <Image
           src={getClipThumbnailUrl(clip.clip_id)}
           alt="Clip thumbnail"

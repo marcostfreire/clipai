@@ -44,9 +44,9 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen bg-linear-to-b from-background to-muted/20">
       {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
@@ -121,7 +121,7 @@ export default function Home() {
           <h3 className="text-2xl font-semibold text-center mb-8">Como Funciona</h3>
           <div className="space-y-4">
             <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                 1
               </div>
               <div>
@@ -132,7 +132,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                 2
               </div>
               <div>
@@ -143,7 +143,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                 3
               </div>
               <div>

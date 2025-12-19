@@ -48,7 +48,7 @@ export default function ClipPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -72,7 +72,7 @@ export default function ClipPage() {
       <main className="container mx-auto px-4 py-8">
         {isLoading ? (
           <div className="max-w-md mx-auto space-y-4">
-            <Skeleton className="aspect-[9/16] w-full" />
+            <Skeleton className="aspect-9/16 w-full" />
             <Skeleton className="h-32 w-full" />
           </div>
         ) : clip ? (

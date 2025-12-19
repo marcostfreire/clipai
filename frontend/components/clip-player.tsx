@@ -71,7 +71,7 @@ export function ClipPlayer({ clip }: ClipPlayerProps) {
         <CardContent className="p-0">
           <video
             controls
-            className="w-full aspect-[9/16] bg-black"
+            className="w-full aspect-9/16g-black"
             src={getClipDownloadUrl(clip.clip_id)}
           />
         </CardContent>

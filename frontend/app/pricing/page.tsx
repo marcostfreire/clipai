@@ -206,11 +206,11 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-16">
         {/* Header */}
         <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-bold mb-4 bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Escolha seu plano
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
@@ -225,13 +225,13 @@ export default function PricingPage() {
             <div
               key={tier.id}
               className={`relative rounded-2xl border-2 p-8 ${tier.highlighted
-                  ? 'border-blue-500 shadow-2xl scale-105 bg-white dark:bg-gray-800'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                ? 'border-blue-500 shadow-2xl scale-105 bg-white dark:bg-gray-800'
+                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                 } transition-transform hover:scale-105`}
             >
               {tier.highlighted && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                  <span className="bg-linear-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-semibold">
                     Mais Popular
                   </span>
                 </div>
@@ -240,8 +240,8 @@ export default function PricingPage() {
               {/* Icon */}
               <div
                 className={`inline-flex p-3 rounded-xl mb-4 ${tier.highlighted
-                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300'
-                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                   }`}
               >
                 {tier.icon}
@@ -271,10 +271,10 @@ export default function PricingPage() {
                 onClick={() => handleSubscribe(tier.priceId, tier.id)}
                 disabled={loading === tier.id || currentPlan === tier.id}
                 className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors mb-8 ${currentPlan === tier.id
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 cursor-default'
-                    : tier.highlighted
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
-                      : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 cursor-default'
+                  : tier.highlighted
+                    ? 'bg-linear-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {currentPlan === tier.id && (
@@ -288,9 +288,9 @@ export default function PricingPage() {
                 {tier.features.map((feature, index) => (
                   <div key={index} className="flex items-start gap-3">
                     <Check
-                      className={`w-5 h-5 mt-0.5 flex-shrink-0 ${tier.highlighted
-                          ? 'text-blue-600'
-                          : 'text-gray-600 dark:text-gray-400'
+                      className={`w-5 h-5 mt-0.5 shrink-0 ${tier.highlighted
+                        ? 'text-blue-600'
+                        : 'text-gray-600 dark:text-gray-400'
                         }`}
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">

@@ -57,7 +57,7 @@ export default function VideoPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/">
