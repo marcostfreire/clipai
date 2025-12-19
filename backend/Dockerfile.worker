@@ -33,11 +33,8 @@ FROM base AS production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Disable health checks by not exposing any port
-ENV PORT=""
+# Expose port for healthcheck server (Railway will set PORT env var)
+EXPOSE 8080
 
-# Run Celery worker with optimized settings for Railway Hobby plan
-# --concurrency=1: Single process to limit memory usage
-# --pool=solo: No multiprocessing, simpler memory footprint
-# --prefetch-multiplier=1: Don't prefetch tasks, process one at a time
-ENTRYPOINT ["celery", "-A", "app.tasks.celery_tasks", "worker", "--loglevel=info", "--concurrency=1", "--pool=solo", "--prefetch-multiplier=1"]
+# Use Python entry point that starts both healthcheck server and Celery
+CMD ["python", "worker_main.py"]
