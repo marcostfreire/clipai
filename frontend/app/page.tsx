@@ -187,12 +187,12 @@ export default function Home() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
                   <a
-                    href="https://huggingface.co/google/gemma-3-4b"
+                    href="https://ai.google.dev/gemini"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:text-foreground"
                   >
-                    Gemma 3 4B
+                    Google Gemini
                   </a>
                 </li>
                 <li>
