@@ -30,6 +30,8 @@ branding/
 .env
 .env.local
 .env.*.local
+logo.png
+logoCopia.png
 
 # Database
 *.db

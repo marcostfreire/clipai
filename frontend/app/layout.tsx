@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "ClipAI - Gerador de Clips Virais com IA",
   description: "Transforme vídeos longos em clips virais automaticamente usando IA",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

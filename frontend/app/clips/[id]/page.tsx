@@ -60,11 +60,11 @@ export default function ClipPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <Image 
-                src="/logo.png" 
-                alt="ClipAI Logo" 
-                width={32} 
-                height={32} 
+              <Image
+                src="/logo.png"
+                alt="ClipAI Logo"
+                width={32}
+                height={32}
                 className="h-8 w-8 object-contain"
               />
               <h1 className="text-2xl font-bold">ClipAI</h1>
