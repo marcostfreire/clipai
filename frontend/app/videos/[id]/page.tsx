@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, Download, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProcessingStatus } from '@/components/processing-status';
@@ -66,7 +67,13 @@ export default function VideoPage() {
               </Button>
             </Link>
             <div className="flex items-center gap-2">
-              <Sparkles className="h-6 w-6 text-primary" />
+              <Image 
+                src="/logo.png" 
+                alt="ClipAI Logo" 
+                width={32} 
+                height={32} 
+                className="h-8 w-8 object-contain"
+              />
               <h1 className="text-2xl font-bold">ClipAI</h1>
             </div>
           </div>

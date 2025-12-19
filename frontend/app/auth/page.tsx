@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { login, register } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,15 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <Image 
+              src="/logo.png" 
+              alt="ClipAI Logo" 
+              width={48} 
+              height={48} 
+              className="h-12 w-12 object-contain"
+            />
+          </div>
           <CardTitle className="text-2xl font-bold">ClipAI</CardTitle>
           <CardDescription>
             Entre ou crie uma conta para começar

@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Sparkles, Zap, Brain, Video, LogOut } from 'lucide-react';
 import { VideoUploader } from '@/components/video-uploader';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,13 @@ export default function Home() {
       <header className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-primary" />
+            <Image 
+              src="/logo.png" 
+              alt="ClipAI Logo" 
+              width={32} 
+              height={32} 
+              className="h-8 w-8 object-contain"
+            />
             <h1 className="text-2xl font-bold">ClipAI</h1>
           </div>
           <nav className="flex gap-4 items-center">

@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ClipPlayer } from '@/components/clip-player';
@@ -59,7 +60,13 @@ export default function ClipPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <Sparkles className="h-6 w-6 text-primary" />
+              <Image 
+                src="/logo.png" 
+                alt="ClipAI Logo" 
+                width={32} 
+                height={32} 
+                className="h-8 w-8 object-contain"
+              />
               <h1 className="text-2xl font-bold">ClipAI</h1>
             </div>
           </div>
