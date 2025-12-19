@@ -142,7 +142,7 @@ export default function PricingPage() {
   const handleSubscribe = async (priceId: string, tierId: string) => {
     if (tierId === 'free') {
       // Redirect to signup for free tier
-      window.location.href = '/auth/register';
+      window.location.href = '/auth';
       return;
     }
 

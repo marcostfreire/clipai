@@ -7,8 +7,8 @@ const targetBase = (process.env.RUNPOD_DIRECT_API_URL || DEFAULT_TARGET).replace
 const ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
 const FALLBACK_ALLOWED_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept';
 
-const buildTargetUrl = (segments: string[] | undefined, search: string) => {
-    const encodedPath = segments?.length ? `/${segments.map((part) => encodeURIComponent(part)).join('/')}` : '';
+const buildTargetUrl = (segments: string[], search: string) => {
+    const encodedPath = segments.length ? `/${segments.map((part) => encodeURIComponent(part)).join('/')}` : '';
     return `${targetBase}${encodedPath}${search}`;
 };
 
@@ -31,7 +31,7 @@ const withCorsHeaders = (headers: Headers, origin?: string, request?: NextReques
     return headers;
 };
 
-type RouteParams = { path?: string[] };
+type RouteParams = { path: string[] };
 type RouteContext = { params: RouteParams } | { params: Promise<RouteParams> };
 
 const resolveParams = async (context: RouteContext): Promise<RouteParams> => {
@@ -51,6 +51,7 @@ const proxyRequest = async (req: NextRequest, params: RouteParams) => {
     }
 
     const targetUrl = buildTargetUrl(params.path, req.nextUrl.search);
+    console.log(`[Proxy] ${req.method} ${req.nextUrl.pathname} -> ${targetUrl}`);
     const fetchHeaders = new Headers(req.headers);
     const forwardedHost = req.headers.get('host');
 
