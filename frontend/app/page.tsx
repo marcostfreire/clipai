@@ -192,7 +192,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="hover:text-foreground"
                   >
-                    Gemma 3 4B 
+                    Gemma 3 4B
                   </a>
                 </li>
                 <li>

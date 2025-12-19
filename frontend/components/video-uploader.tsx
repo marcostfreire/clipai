@@ -3,21 +3,37 @@
  */
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Upload, Link as LinkIcon, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { uploadVideo, uploadVideoFromUrl } from '@/lib/api';
+import { uploadVideo, uploadVideoFromUrl, getSubscriptionLimits, isAuthenticated, SubscriptionLimits } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
+import { PaywallModal, UsageIndicator } from '@/components/paywall-modal';
 
 export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => void }) {
   const [dragActive, setDragActive] = useState(false);
   const [url, setUrl] = useState('');
+  const [limits, setLimits] = useState<SubscriptionLimits | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallReason, setPaywallReason] = useState('');
+  const [paywallType, setPaywallType] = useState<'limit_reached' | 'duration_exceeded' | 'feature_locked'>('limit_reached');
   const { isUploading, uploadProgress, setIsUploading, setUploadProgress } = useAppStore();
+
+  // Fetch subscription limits on mount
+  useEffect(() => {
+    if (isAuthenticated()) {
+      getSubscriptionLimits()
+        .then(setLimits)
+        .catch((err) => {
+          console.error('Error fetching limits:', err);
+        });
+    }
+  }, []);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -37,9 +53,30 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       await handleFileUpload(e.dataTransfer.files[0]);
     }
-  }, []);
+  }, [limits]);
+
+  const checkCanUpload = (): boolean => {
+    // If not authenticated, allow upload (backend will handle anonymous users)
+    if (!isAuthenticated()) {
+      return true;
+    }
+
+    // If we have limits info and user can't upload, show paywall
+    if (limits && !limits.can_upload) {
+      setPaywallReason(`Você atingiu o limite de ${limits.limits.videos_per_month} vídeos por mês no plano ${limits.plan_display_name}.`);
+      setPaywallType('limit_reached');
+      setShowPaywall(true);
+      return false;
+    }
+
+    return true;
+  };
 
   const handleFileUpload = async (file: File) => {
+    if (!checkCanUpload()) {
+      return;
+    }
+
     try {
       setIsUploading(true);
       setUploadProgress(0);
@@ -52,7 +89,26 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
       onSuccess(response.video_id);
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error(error.response?.data?.detail || 'Erro ao enviar vídeo');
+
+      // Check for paywall error (402 Payment Required)
+      if (error.response?.status === 402) {
+        const errorData = error.response.data?.detail;
+        if (errorData?.error === 'subscription_limit_reached') {
+          setPaywallReason(errorData.message);
+          setPaywallType('limit_reached');
+          setShowPaywall(true);
+          // Refresh limits
+          if (isAuthenticated()) {
+            getSubscriptionLimits().then(setLimits).catch(console.error);
+          }
+        } else if (errorData?.error === 'video_too_long') {
+          setPaywallReason(errorData.message);
+          setPaywallType('duration_exceeded');
+          setShowPaywall(true);
+        }
+      } else {
+        toast.error(error.response?.data?.detail || 'Erro ao enviar vídeo');
+      }
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -65,6 +121,10 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
       return;
     }
 
+    if (!checkCanUpload()) {
+      return;
+    }
+
     try {
       setIsUploading(true);
       const response = await uploadVideoFromUrl(url);
@@ -72,7 +132,18 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
       onSuccess(response.video_id);
     } catch (error: any) {
       console.error('URL upload error:', error);
-      toast.error(error.response?.data?.detail || 'Erro ao carregar vídeo da URL');
+
+      // Check for paywall error
+      if (error.response?.status === 402) {
+        const errorData = error.response.data?.detail;
+        if (errorData?.error === 'subscription_limit_reached') {
+          setPaywallReason(errorData.message);
+          setPaywallType('limit_reached');
+          setShowPaywall(true);
+        }
+      } else {
+        toast.error(error.response?.data?.detail || 'Erro ao carregar vídeo da URL');
+      }
     } finally {
       setIsUploading(false);
       setUrl('');
@@ -80,89 +151,132 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto p-6">
-      <Tabs defaultValue="file" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="file">Upload de Arquivo</TabsTrigger>
-          <TabsTrigger value="url">URL do YouTube</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="file">
-          <div
-            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
-              }`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-          >
-            {isUploading ? (
-              <div className="space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-                <div>
-                  <p className="text-lg font-medium">Enviando vídeo...</p>
-                  <Progress value={uploadProgress} className="mt-2" />
-                  <p className="text-sm text-muted-foreground mt-2">{uploadProgress}%</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
-                <div>
-                  <p className="text-lg font-medium">Arraste e solte seu vídeo aqui</p>
-                  <p className="text-sm text-muted-foreground">ou</p>
-                </div>
-                <Button
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'video/*';
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) handleFileUpload(file);
-                    };
-                    input.click();
-                  }}
-                >
-                  Selecionar Arquivo
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Formatos aceitos: MP4, MOV, AVI, MKV, WEBM
-                  <br />
-                  Tamanho máximo: 500 MB | Duração máxima: 60 minutos
-                </p>
-              </div>
-            )}
+    <>
+      <Card className="w-full max-w-2xl mx-auto p-6">
+        {/* Usage indicator for authenticated users */}
+        {limits && (
+          <div className="mb-4">
+            <UsageIndicator limits={limits} />
           </div>
-        </TabsContent>
+        )}
 
-        <TabsContent value="url">
-          <div className="space-y-4 p-6">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Cole a URL do YouTube aqui..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={isUploading}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleUrlUpload();
-                }}
-              />
-              <Button onClick={handleUrlUpload} disabled={isUploading || !url.trim()}>
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <LinkIcon className="h-4 w-4" />
-                )}
-                <span className="ml-2">Carregar</span>
-              </Button>
+        <Tabs defaultValue="file" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="file">Upload de Arquivo</TabsTrigger>
+            <TabsTrigger value="url">URL do YouTube</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="file">
+            <div
+              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+                } ${limits && !limits.can_upload ? 'opacity-50' : ''}`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              {isUploading ? (
+                <div className="space-y-4">
+                  <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
+                  <div>
+                    <p className="text-lg font-medium">Enviando vídeo...</p>
+                    <Progress value={uploadProgress} className="mt-2" />
+                    <p className="text-sm text-muted-foreground mt-2">{uploadProgress}%</p>
+                  </div>
+                </div>
+              ) : limits && !limits.can_upload ? (
+                <div className="space-y-4">
+                  <AlertCircle className="h-12 w-12 mx-auto text-amber-500" />
+                  <div>
+                    <p className="text-lg font-medium">Limite atingido</p>
+                    <p className="text-sm text-muted-foreground">
+                      Você usou todos os {limits.limits.videos_per_month} vídeos do mês
+                    </p>
+                  </div>
+                  <Button onClick={() => setShowPaywall(true)}>
+                    Fazer Upgrade
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
+                  <div>
+                    <p className="text-lg font-medium">Arraste e solte seu vídeo aqui</p>
+                    <p className="text-sm text-muted-foreground">ou</p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'video/*';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file) handleFileUpload(file);
+                      };
+                      input.click();
+                    }}
+                  >
+                    Selecionar Arquivo
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Formatos aceitos: MP4, MOV, AVI, MKV, WEBM
+                    <br />
+                    Tamanho máximo: 500 MB | Duração máxima: {limits ? limits.limits.max_video_duration_minutes : 60} minutos
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Cole a URL de um vídeo do YouTube para processar
-            </p>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </Card>
+          </TabsContent>
+
+          <TabsContent value="url">
+            <div className="space-y-4 p-6">
+              {limits && !limits.can_upload ? (
+                <div className="text-center space-y-4">
+                  <AlertCircle className="h-12 w-12 mx-auto text-amber-500" />
+                  <p className="text-muted-foreground">Limite de vídeos atingido</p>
+                  <Button onClick={() => setShowPaywall(true)}>
+                    Fazer Upgrade
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Cole a URL do YouTube aqui..."
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      disabled={isUploading}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleUrlUpload();
+                      }}
+                    />
+                    <Button onClick={handleUrlUpload} disabled={isUploading || !url.trim()}>
+                      {isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LinkIcon className="h-4 w-4" />
+                      )}
+                      <span className="ml-2">Carregar</span>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Cole a URL de um vídeo do YouTube para processar
+                  </p>
+                </>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
+
+      {/* Paywall Modal */}
+      <PaywallModal
+        isOpen={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        limits={limits}
+        reason={paywallReason}
+        type={paywallType}
+      />
+    </>
   );
 }

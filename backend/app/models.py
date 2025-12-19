@@ -45,6 +45,7 @@ class Video(Base):
     __tablename__ = "videos"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
     file_size = Column(Integer, nullable=False)  # bytes
@@ -52,13 +53,14 @@ class Video(Base):
     status = Column(String, default="queued")  # queued, processing, completed, failed
     progress = Column(Integer, default=0)  # 0-100
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(
         DateTime(timezone=True), onupdate=func.now(), server_default=func.now()
     )
 
     # Relationships
     clips = relationship("Clip", back_populates="video", cascade="all, delete-orphan")
+    user = relationship("User", backref="videos")
 
 
 class Clip(Base):

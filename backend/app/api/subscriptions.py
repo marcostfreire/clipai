@@ -10,6 +10,13 @@ from ..database import get_db
 from ..models import User
 from ..config import settings
 from .auth import get_current_user
+from ..services.subscription_service import (
+    get_user_usage_stats,
+    check_video_upload_allowed,
+    get_plan_limits,
+    get_user_plan,
+    PLAN_LIMITS,
+)
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
@@ -43,6 +50,67 @@ class SubscriptionStatusResponse(BaseModel):
     status: str  # 'active', 'canceled', 'past_due', etc.
     current_period_end: Optional[str] = None
     cancel_at_period_end: bool = False
+
+
+class UsageLimitsResponse(BaseModel):
+    """User's usage and limits information."""
+    
+    plan: str
+    plan_display_name: str
+    subscription_status: str
+    limits: dict
+    usage: dict
+    reset: dict
+    can_upload: bool
+    upgrade_url: Optional[str] = None
+
+
+@router.get("/limits", response_model=UsageLimitsResponse)
+async def get_usage_limits(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get current user's usage limits and statistics.
+    
+    Returns plan info, current usage, limits, and when usage resets.
+    """
+    try:
+        stats = get_user_usage_stats(db, current_user)
+        upload_check = check_video_upload_allowed(db, current_user)
+        
+        return UsageLimitsResponse(
+            plan=stats["plan"],
+            plan_display_name=stats["plan_display_name"],
+            subscription_status=stats["subscription_status"],
+            limits=stats["limits"],
+            usage=stats["usage"],
+            reset=stats["reset"],
+            can_upload=upload_check["allowed"],
+            upgrade_url="/pricing" if stats["plan"] != "pro" else None,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get usage limits: {str(e)}",
+        )
+
+
+@router.get("/plans")
+async def get_available_plans():
+    """
+    Get all available subscription plans with their limits.
+    
+    Returns plan details for displaying in pricing page.
+    """
+    plans = []
+    for plan_id, limits in PLAN_LIMITS.items():
+        plans.append({
+            "id": plan_id,
+            "name": plan_id.title(),
+            "limits": limits,
+        })
+    return {"plans": plans}
 
 
 @router.post("/create-checkout", response_model=CheckoutSessionResponse)
@@ -115,6 +183,7 @@ async def create_checkout_session(
 @router.get("/status", response_model=SubscriptionStatusResponse)
 async def get_subscription_status(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Get current user's subscription status.
@@ -122,39 +191,37 @@ async def get_subscription_status(
     Returns the user's current plan and subscription details.
     """
     try:
+        # Get plan using service
+        plan = get_user_plan(current_user)
+        
         # If no Stripe subscription, user is on free plan
         if not current_user.stripe_subscription_id:
             return SubscriptionStatusResponse(
-                plan="free",
-                status="active",
+                plan=plan,
+                status=current_user.subscription_status or "active",
             )
 
-        # Retrieve subscription from Stripe
-        subscription = stripe.Subscription.retrieve(
-            current_user.stripe_subscription_id
-        )
-
-        # Determine plan based on price ID
-        plan = "free"
-        if subscription.items.data:
-            price_id = subscription.items.data[0].price.id
-            if price_id == settings.stripe_price_pro:
-                plan = "pro"
-            elif price_id == settings.stripe_price_starter:
-                plan = "starter"
-
+        # Retrieve subscription from Stripe for detailed info
+        if STRIPE_ENABLED:
+            try:
+                subscription = stripe.Subscription.retrieve(
+                    current_user.stripe_subscription_id
+                )
+                
+                return SubscriptionStatusResponse(
+                    plan=plan,
+                    status=subscription.status,
+                    current_period_end=str(subscription.current_period_end),
+                    cancel_at_period_end=subscription.cancel_at_period_end,
+                )
+            except stripe.error.StripeError:
+                pass  # Fall back to stored values
+        
         return SubscriptionStatusResponse(
             plan=plan,
-            status=subscription.status,
-            current_period_end=str(subscription.current_period_end),
-            cancel_at_period_end=subscription.cancel_at_period_end,
+            status=current_user.subscription_status or "active",
         )
 
-    except stripe.error.StripeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stripe error: {str(e)}",
-        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

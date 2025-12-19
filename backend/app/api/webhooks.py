@@ -8,6 +8,10 @@ import logging
 from ..database import get_db
 from ..models import User
 from ..config import settings
+from ..services.subscription_service import (
+    get_plan_from_price_id,
+    update_user_subscription_from_stripe,
+)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -116,6 +120,20 @@ async def handle_checkout_completed(session: dict, db: Session):
     # Update user with Stripe IDs
     user.stripe_customer_id = customer_id
     user.stripe_subscription_id = subscription_id
+    
+    # Get subscription details to determine plan
+    if subscription_id:
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            if subscription.items.data:
+                price_id = subscription.items.data[0].price.id
+                plan = get_plan_from_price_id(price_id)
+                user.subscription_tier = plan
+                user.subscription_status = subscription.status
+                logger.info(f"Set user {user_id} to plan: {plan}")
+        except Exception as e:
+            logger.error(f"Error fetching subscription details: {e}")
+    
     db.commit()
 
     logger.info(f"Updated user {user_id} with subscription {subscription_id}")
@@ -133,9 +151,17 @@ async def handle_subscription_created(subscription: dict, db: Session):
         return
 
     user.stripe_subscription_id = subscription_id
+    
+    # Update plan based on price
+    if subscription.get("items", {}).get("data"):
+        price_id = subscription["items"]["data"][0]["price"]["id"]
+        plan = get_plan_from_price_id(price_id)
+        user.subscription_tier = plan
+        user.subscription_status = subscription.get("status", "active")
+    
     db.commit()
 
-    logger.info(f"Created subscription {subscription_id} for user {user.id}")
+    logger.info(f"Created subscription {subscription_id} for user {user.id} - Plan: {user.subscription_tier}")
 
 
 async def handle_subscription_updated(subscription: dict, db: Session):
@@ -151,8 +177,17 @@ async def handle_subscription_updated(subscription: dict, db: Session):
         return
 
     # Update subscription status
-    # Note: You might want to add a subscription_status field to User model
-    logger.info(f"Updated subscription {subscription_id} status to {status} for user {user.id}")
+    user.subscription_status = status
+    
+    # Update plan if changed
+    if subscription.get("items", {}).get("data"):
+        price_id = subscription["items"]["data"][0]["price"]["id"]
+        plan = get_plan_from_price_id(price_id)
+        user.subscription_tier = plan
+    
+    db.commit()
+    
+    logger.info(f"Updated subscription {subscription_id} status to {status} for user {user.id} - Plan: {user.subscription_tier}")
 
 
 async def handle_subscription_deleted(subscription: dict, db: Session):
@@ -166,8 +201,10 @@ async def handle_subscription_deleted(subscription: dict, db: Session):
         logger.error(f"User not found for customer: {customer_id}")
         return
 
-    # Clear subscription ID (user reverts to free tier)
+    # Clear subscription ID and revert to free tier
     user.stripe_subscription_id = None
+    user.subscription_tier = "free"
+    user.subscription_status = "canceled"
     db.commit()
 
-    logger.info(f"Deleted subscription {subscription_id} for user {user.id}")
+    logger.info(f"Deleted subscription {subscription_id} for user {user.id} - Reverted to free tier")

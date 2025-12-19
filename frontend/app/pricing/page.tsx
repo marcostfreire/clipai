@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, Zap, Rocket, Star } from 'lucide-react';
-import { API_BASE_URL } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import { Check, Zap, Rocket, Star, Crown } from 'lucide-react';
+import { API_BASE_URL, getSubscriptionStatus, isAuthenticated, SubscriptionStatus } from '@/lib/api';
+import Link from 'next/link';
 
 interface PricingTier {
   id: string;
@@ -21,6 +22,7 @@ interface PricingTier {
     watermark: boolean;
     queue: string;
     api: boolean;
+    maxDuration: number;
   };
 }
 
@@ -36,14 +38,17 @@ const pricingTiers: PricingTier[] = [
     icon: <Star className="w-6 h-6" />,
     limits: {
       videos: 2,
-      clips: '3 clips',
+      clips: '3 clips por vídeo',
       watermark: true,
       queue: 'Padrão',
       api: false,
+      maxDuration: 30,
     },
     features: [
       '2 vídeos por mês',
-      '3 clips com marca d\'água',
+      'Até 3 clips por vídeo',
+      'Marca d\'água ClipAI',
+      'Vídeos até 30 minutos',
       'Processamento com IA',
       'Legendas automáticas',
       'Detecção de momentos virais',
@@ -66,11 +71,13 @@ const pricingTiers: PricingTier[] = [
       watermark: false,
       queue: 'Padrão',
       api: false,
+      maxDuration: 60,
     },
     features: [
       '12 vídeos por mês',
-      'Clips ilimitados',
+      'Clips ilimitados por vídeo',
       'Sem marca d\'água',
+      'Vídeos até 60 minutos',
       'Processamento com IA avançada',
       'Legendas automáticas',
       'Detecção de momentos virais',
@@ -94,11 +101,13 @@ const pricingTiers: PricingTier[] = [
       watermark: false,
       queue: 'Prioritária',
       api: true,
+      maxDuration: 120,
     },
     features: [
       '50 vídeos por mês',
-      'Clips ilimitados',
+      'Clips ilimitados por vídeo',
       'Sem marca d\'água',
+      'Vídeos até 120 minutos',
       'Acesso via API',
       'Fila prioritária',
       'Processamento mais rápido',
@@ -113,11 +122,33 @@ const pricingTiers: PricingTier[] = [
 
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+
+  useEffect(() => {
+    // Check if user is authenticated and get their current plan
+    if (isAuthenticated()) {
+      getSubscriptionStatus()
+        .then((status) => {
+          setSubscriptionStatus(status);
+          setCurrentPlan(status.plan);
+        })
+        .catch((err) => {
+          console.error('Error fetching subscription status:', err);
+        });
+    }
+  }, []);
 
   const handleSubscribe = async (priceId: string, tierId: string) => {
     if (tierId === 'free') {
       // Redirect to signup for free tier
       window.location.href = '/auth/register';
+      return;
+    }
+
+    // If already on this plan, go to portal
+    if (currentPlan === tierId) {
+      window.location.href = `${API_BASE_URL}/subscriptions/portal`;
       return;
     }
 
@@ -135,7 +166,7 @@ export default function PricingPage() {
           },
           body: JSON.stringify({
             price_id: priceId,
-            success_url: `${window.location.origin}/videos?session_id={CHECKOUT_SESSION_ID}`,
+            success_url: `${window.location.origin}/videos?session_id={CHECKOUT_SESSION_ID}&upgraded=true`,
             cancel_url: `${window.location.origin}/pricing`,
           }),
         }
@@ -164,6 +195,16 @@ export default function PricingPage() {
     }
   };
 
+  const getButtonText = (tierId: string) => {
+    if (loading === tierId) return 'Carregando...';
+    if (currentPlan === tierId) return 'Plano Atual';
+    if (tierId === 'free') return 'Começar Grátis';
+    if (currentPlan && pricingTiers.findIndex(t => t.id === tierId) > pricingTiers.findIndex(t => t.id === currentPlan)) {
+      return 'Fazer Upgrade';
+    }
+    return 'Assinar Agora';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-16">
@@ -183,11 +224,10 @@ export default function PricingPage() {
           {pricingTiers.map((tier) => (
             <div
               key={tier.id}
-              className={`relative rounded-2xl border-2 p-8 ${
-                tier.highlighted
+              className={`relative rounded-2xl border-2 p-8 ${tier.highlighted
                   ? 'border-blue-500 shadow-2xl scale-105 bg-white dark:bg-gray-800'
                   : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-              } transition-transform hover:scale-105`}
+                } transition-transform hover:scale-105`}
             >
               {tier.highlighted && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
@@ -199,11 +239,10 @@ export default function PricingPage() {
 
               {/* Icon */}
               <div
-                className={`inline-flex p-3 rounded-xl mb-4 ${
-                  tier.highlighted
+                className={`inline-flex p-3 rounded-xl mb-4 ${tier.highlighted
                     ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300'
                     : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                }`}
+                  }`}
               >
                 {tier.icon}
               </div>
@@ -230,20 +269,18 @@ export default function PricingPage() {
               {/* CTA Button */}
               <button
                 onClick={() => handleSubscribe(tier.priceId, tier.id)}
-                disabled={loading === tier.id}
-                className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors mb-8 ${
-                  tier.highlighted
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                disabled={loading === tier.id || currentPlan === tier.id}
+                className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors mb-8 ${currentPlan === tier.id
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 cursor-default'
+                    : tier.highlighted
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+                      : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {loading === tier.id ? (
-                  'Carregando...'
-                ) : tier.id === 'free' ? (
-                  'Começar Grátis'
-                ) : (
-                  'Assinar Agora'
+                {currentPlan === tier.id && (
+                  <Crown className="inline-block w-4 h-4 mr-2" />
                 )}
+                {getButtonText(tier.id)}
               </button>
 
               {/* Features */}
@@ -251,11 +288,10 @@ export default function PricingPage() {
                 {tier.features.map((feature, index) => (
                   <div key={index} className="flex items-start gap-3">
                     <Check
-                      className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                        tier.highlighted
+                      className={`w-5 h-5 mt-0.5 flex-shrink-0 ${tier.highlighted
                           ? 'text-blue-600'
                           : 'text-gray-600 dark:text-gray-400'
-                      }`}
+                        }`}
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">
                       {feature}

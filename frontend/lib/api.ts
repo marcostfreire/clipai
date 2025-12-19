@@ -373,3 +373,95 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem('access_token');
 }
 
+// =====================
+// Subscription API
+// =====================
+
+export interface SubscriptionLimits {
+  plan: string;
+  plan_display_name: string;
+  subscription_status: string;
+  limits: {
+    videos_per_month: number;
+    clips_per_video: number;
+    max_video_duration_minutes: number;
+    watermark: boolean;
+    priority_queue: boolean;
+    api_access: boolean;
+  };
+  usage: {
+    videos_this_month: number;
+    videos_remaining: number;
+    percentage_used: number;
+  };
+  reset: {
+    days_until_reset: number;
+    reset_date: string;
+  };
+  can_upload: boolean;
+  upgrade_url: string | null;
+}
+
+export interface SubscriptionStatus {
+  plan: string;
+  status: string;
+  current_period_end?: string;
+  cancel_at_period_end: boolean;
+}
+
+/**
+ * Get user's subscription limits and usage
+ */
+export async function getSubscriptionLimits(): Promise<SubscriptionLimits> {
+  const response = await api.get<SubscriptionLimits>('/subscriptions/limits');
+  return response.data;
+}
+
+/**
+ * Get user's subscription status
+ */
+export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
+  const response = await api.get<SubscriptionStatus>('/subscriptions/status');
+  return response.data;
+}
+
+/**
+ * Create checkout session for subscription upgrade
+ */
+export async function createCheckoutSession(
+  priceId: string,
+  successUrl: string,
+  cancelUrl: string
+): Promise<{ url: string; session_id: string }> {
+  const response = await api.post('/subscriptions/create-checkout', {
+    price_id: priceId,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+  });
+  return response.data;
+}
+
+/**
+ * Get customer portal URL
+ */
+export async function getCustomerPortalUrl(): Promise<{ url: string }> {
+  const response = await api.get('/subscriptions/portal');
+  return response.data;
+}
+
+/**
+ * Cancel subscription
+ */
+export async function cancelSubscription(): Promise<{ message: string; current_period_end: number }> {
+  const response = await api.post('/subscriptions/cancel');
+  return response.data;
+}
+
+/**
+ * Reactivate subscription
+ */
+export async function reactivateSubscription(): Promise<{ message: string; current_period_end: number }> {
+  const response = await api.post('/subscriptions/reactivate');
+  return response.data;
+}
+

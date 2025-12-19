@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: '*.up.railway.app',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: '*.proxy.runpod.net',
         pathname: '/storage/**',
       },

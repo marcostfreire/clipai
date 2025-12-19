@@ -18,7 +18,12 @@ from ..schemas import (
 )
 from ..config import settings
 from ..services.ffmpeg_service import FFmpegService
-from ..services.auth_service import get_current_user_optional
+from ..services.auth_service import get_current_user_optional, get_current_user
+from ..services.subscription_service import (
+    check_video_upload_allowed,
+    get_plan_limits,
+    get_user_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +50,21 @@ async def upload_video(
     """
     try:
         logger.info(f"Upload request received - file: {file.filename if file else None}, url: {url}")
+        
+        # Check subscription limits
+        limit_check = check_video_upload_allowed(db, current_user)
+        if not limit_check["allowed"]:
+            raise HTTPException(
+                status_code=402,  # Payment Required
+                detail={
+                    "error": "subscription_limit_reached",
+                    "message": limit_check["reason"],
+                    "plan": limit_check["plan"],
+                    "used": limit_check["used"],
+                    "limit": limit_check["limit"],
+                    "upgrade_url": limit_check.get("upgrade_url", "/pricing"),
+                }
+            )
         
         if not file and not url:
             raise HTTPException(
@@ -102,14 +122,25 @@ async def upload_video(
                 video_info = ffmpeg.get_video_info(file_path)
                 duration = video_info["duration"]
 
-                # Check duration limit
-                if duration > settings.max_video_duration_sec:
+                # Check duration limit based on user's plan
+                plan = get_user_plan(current_user)
+                plan_limits = get_plan_limits(plan)
+                max_duration_sec = plan_limits["max_video_duration_minutes"] * 60
+                
+                if duration > max_duration_sec:
                     os.remove(file_path)
                     os.rmdir(video_dir)
-                    max_minutes = settings.max_video_duration_sec // 60
+                    max_minutes = plan_limits["max_video_duration_minutes"]
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Video too long. Maximum duration: {max_minutes} minutes",
+                        detail={
+                            "error": "video_too_long",
+                            "message": f"Vídeo muito longo. Máximo permitido no plano {plan.title()}: {max_minutes} minutos",
+                            "max_duration_minutes": max_minutes,
+                            "video_duration_minutes": round(duration / 60, 1),
+                            "plan": plan,
+                            "upgrade_url": "/pricing" if plan != "pro" else None,
+                        }
                     )
 
             except Exception as e:
@@ -154,6 +185,7 @@ async def upload_video(
         # Create database record
         video = Video(
             id=video_id,
+            user_id=current_user.id if current_user else None,
             filename=filename,
             file_path=file_path,
             file_size=file_size,
