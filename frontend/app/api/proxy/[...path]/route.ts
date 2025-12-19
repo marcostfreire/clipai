@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 
 export const runtime = 'edge';
 
-const DEFAULT_TARGET = 'https://qh3hpqrnck8ila-8000.proxy.runpod.net/api';
-const targetBase = (process.env.RUNPOD_DIRECT_API_URL || DEFAULT_TARGET).replace(/\/$/, '');
+// Backend API URL - Railway deployment
+const DEFAULT_TARGET = 'https://api-production-51cf.up.railway.app/api';
+const targetBase = (process.env.BACKEND_API_URL || DEFAULT_TARGET).replace(/\/$/, '');
 const ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
 const FALLBACK_ALLOWED_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept';
 
@@ -42,7 +43,7 @@ const resolveParams = async (context: RouteContext): Promise<RouteParams> => {
 const proxyRequest = async (req: NextRequest, params: RouteParams) => {
     if (!targetBase) {
         return new Response(
-            JSON.stringify({ error: 'RUNPOD_DIRECT_API_URL is not configured' }),
+            JSON.stringify({ error: 'BACKEND_API_URL is not configured' }),
             {
                 status: 500,
                 headers: withCorsHeaders(new Headers({ 'Content-Type': 'application/json' }), req.headers.get('origin') || '*', req),
