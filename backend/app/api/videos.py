@@ -155,32 +155,53 @@ async def upload_video(
             import yt_dlp
 
             file_path = os.path.join(video_dir, "original.mp4")
+            
+            logger.info(f"[VIDEO:{video_id}] Downloading from URL: {url}")
 
             ydl_opts = {
-                "format": "best[ext=mp4]",
+                "format": "best[ext=mp4]/best",  # Fallback to any best format
                 "outtmpl": file_path,
-                "quiet": True,
-                "no_warnings": True,
+                "quiet": False,  # Show output for debugging
+                "no_warnings": False,
+                "extract_flat": False,
+                "socket_timeout": 30,
+                "retries": 3,
             }
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
+                    logger.info(f"[VIDEO:{video_id}] Starting yt-dlp download...")
+                    info = ydl.extract_info(url, download=True)
+                    logger.info(f"[VIDEO:{video_id}] Download complete: {info.get('title', 'unknown')}")
 
-                filename = "downloaded_video.mp4"
+                filename = info.get("title", "downloaded_video") + ".mp4"
+                
+                # Check if file was created
+                if not os.path.exists(file_path):
+                    raise Exception(f"Download completed but file not found at {file_path}")
+                
                 file_size = os.path.getsize(file_path)
+                logger.info(f"[VIDEO:{video_id}] File size: {file_size / 1024 / 1024:.2f} MB")
 
                 # Get video info
                 ffmpeg = FFmpegService()
                 video_info = ffmpeg.get_video_info(file_path)
                 duration = video_info["duration"]
+                logger.info(f"[VIDEO:{video_id}] Duration: {duration:.2f}s")
 
-            except Exception as e:
-                logger.error(f"Error downloading YouTube video: {e}")
+            except yt_dlp.utils.DownloadError as e:
+                logger.error(f"[VIDEO:{video_id}] yt-dlp DownloadError: {e}")
                 if os.path.exists(video_dir):
                     shutil.rmtree(video_dir)
                 raise HTTPException(
-                    status_code=400, detail=f"Failed to download video: {str(e)}"
+                    status_code=400, detail=f"Não foi possível baixar o vídeo. Verifique se a URL é válida e pública. Erro: {str(e)}"
+                )
+            except Exception as e:
+                logger.error(f"[VIDEO:{video_id}] Error downloading video: {e}", exc_info=True)
+                if os.path.exists(video_dir):
+                    shutil.rmtree(video_dir)
+                raise HTTPException(
+                    status_code=400, detail=f"Falha ao baixar vídeo: {str(e)}"
                 )
 
         # Create database record
