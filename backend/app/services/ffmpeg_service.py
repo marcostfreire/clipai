@@ -168,7 +168,12 @@ class FFmpegService:
         self, video_path: str, output_path: str, start_time: float, duration: float
     ) -> str:
         """
-        Cut a segment from video.
+        Cut a segment from video with PRECISE timestamp alignment.
+
+        NOTE: We use re-encoding instead of -c copy to ensure:
+        1. Exact frame-accurate cuts (not keyframe-dependent)
+        2. Subtitle timestamps match actual video content
+        3. No audio/video sync issues
 
         Args:
             video_path: Path to source video
@@ -180,6 +185,9 @@ class FFmpegService:
             Path to cut video
         """
         try:
+            # IMPORTANT: Using re-encode for precise cuts
+            # -c copy is fast but seeks to nearest keyframe, causing desync
+            # Re-encoding ensures the video starts EXACTLY at start_time
             cmd = [
                 self.ffmpeg_path,
                 "-ss",
@@ -188,14 +196,23 @@ class FFmpegService:
                 video_path,
                 "-t",
                 str(duration),
-                "-c",
-                "copy",  # Copy codec (fast)
+                "-c:v",
+                "libx264",
+                "-preset",
+                self.preset,
+                "-crf",
+                str(self.crf),
+                "-c:a",
+                "aac",
+                "-b:a",
+                self.audio_bitrate,
                 "-avoid_negative_ts",
                 "make_zero",
+                "-y",
                 output_path,
             ]
 
-            logger.info(f"Cutting video from {start_time}s for {duration}s")
+            logger.info(f"Cutting video from {start_time}s for {duration}s (re-encoding for precise alignment)")
             subprocess.run(cmd, check=True, capture_output=True)
 
             return output_path
@@ -208,12 +225,19 @@ class FFmpegService:
         self, video_path: str, output_path: str, face_position: Optional[float] = 0.5
     ) -> str:
         """
-        Convert video to vertical format (9:16).
+        Convert video to vertical format (9:16) with intelligent face-aware cropping.
+
+        The algorithm:
+        1. Calculate the 9:16 crop window size
+        2. Position the crop window to keep the face centered
+        3. Apply safety margins to avoid cutting faces at edges
+        4. Handle edge cases like split-screens by biasing toward detected face
 
         Args:
             video_path: Path to source video
             output_path: Path to save vertical video
             face_position: Face position as ratio (0.0=left, 0.5=center, 1.0=right)
+                          If None or invalid, defaults to center (0.5)
 
         Returns:
             Path to vertical video
@@ -224,35 +248,76 @@ class FFmpegService:
             width = info["width"]
             height = info["height"]
 
+            logger.info(f"🎬 INPUT VIDEO: {width}x{height} (aspect: {width/height:.2f})")
+
+            # Validate face_position
+            if face_position is None or not (0.0 <= face_position <= 1.0):
+                logger.warning(f"⚠️ Invalid face_position={face_position}, defaulting to center (0.5)")
+                face_position = 0.5
+
             # Calculate crop parameters for 9:16
-            target_aspect = 9 / 16
+            target_aspect = 9 / 16  # 0.5625
             crop_width = int(height * target_aspect)
 
             # Ensure crop width doesn't exceed video width
             if crop_width > width:
                 crop_width = width
                 crop_height = int(width / target_aspect)
+                logger.info(f"📐 Video too narrow, adjusting crop height to {crop_height}")
             else:
                 crop_height = height
-
-            # Calculate x position based on face position ratio
-            # face_position: 0.0 = face at left edge, 0.5 = centered, 1.0 = face at right edge
-            # We want to center the crop window on the face position
 
             # Calculate where face is in pixels
             face_x_pixel = int(width * face_position)
 
-            # Center the crop window on the face
-            x_pos = face_x_pixel - (crop_width // 2)
-
+            # IMPROVED ALGORITHM: Ensure face stays within the crop window with margin
+            # Add a safety margin (15% of crop width) to avoid faces being cut at edges
+            safety_margin = int(crop_width * 0.15)
+            
+            # Calculate ideal crop position (face at center of crop window)
+            ideal_x_pos = face_x_pixel - (crop_width // 2)
+            
+            # Calculate valid range for crop position
+            min_x_pos = 0
+            max_x_pos = width - crop_width
+            
             # Clamp to valid range
-            x_pos = max(0, min(x_pos, width - crop_width))
+            x_pos = max(min_x_pos, min(ideal_x_pos, max_x_pos))
+            
+            # Check if face would be too close to crop edge and adjust
+            face_pos_in_crop = face_x_pixel - x_pos
+            
+            if face_pos_in_crop < safety_margin:
+                # Face too close to left edge of crop - shift crop left if possible
+                new_x_pos = max(min_x_pos, face_x_pixel - safety_margin)
+                logger.info(f"🔄 Adjusting crop LEFT to keep face in view: {x_pos} -> {new_x_pos}")
+                x_pos = new_x_pos
+            elif face_pos_in_crop > (crop_width - safety_margin):
+                # Face too close to right edge of crop - shift crop right if possible
+                new_x_pos = min(max_x_pos, face_x_pixel - crop_width + safety_margin)
+                logger.info(f"🔄 Adjusting crop RIGHT to keep face in view: {x_pos} -> {new_x_pos}")
+                x_pos = new_x_pos
 
             y_pos = (height - crop_height) // 2
 
+            # Calculate where face ends up in the final crop
+            final_face_pos_in_crop = face_x_pixel - x_pos
+            face_pos_percent = (final_face_pos_in_crop / crop_width) * 100
+
             logger.info(
-                f"🎯 CROP CALCULATION: Video {width}x{height} | Face at {face_position:.2f} = {face_x_pixel}px | Crop window: {crop_width}x{crop_height} starting at x={x_pos}"
+                f"🎯 CROP CALCULATION:\n"
+                f"   📺 Input: {width}x{height}\n"
+                f"   👤 Face detected at: {face_position:.1%} ({face_x_pixel}px from left)\n"
+                f"   ✂️  Crop window: {crop_width}x{crop_height}\n"
+                f"   📍 Crop X position: {x_pos}px (range: {x_pos}-{x_pos + crop_width}px)\n"
+                f"   ✅ Face in crop at: {face_pos_percent:.1f}% ({final_face_pos_in_crop}px from crop left)"
             )
+
+            # Warn if face might still be near edge
+            if face_pos_percent < 20 or face_pos_percent > 80:
+                logger.warning(
+                    f"⚠️ Face near crop edge ({face_pos_percent:.1f}%) - may be partially cut"
+                )
 
             # Crop and scale to 1080x1920
             filter_complex = (
@@ -276,11 +341,15 @@ class FFmpegService:
                 "aac",
                 "-b:a",
                 self.audio_bitrate,
+                "-y",
                 output_path,
             ]
 
             logger.info(f"Converting to vertical format: {video_path}")
-            subprocess.run(cmd, check=True, capture_output=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            
+            if result.stderr:
+                logger.debug(f"FFmpeg stderr: {result.stderr[:500]}")
 
             return output_path
 

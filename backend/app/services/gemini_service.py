@@ -223,22 +223,22 @@ class GeminiService:
   "engagement_score": 0-10 (number)
 }
 
-Rate engagement based on:
-- Face presence and expression (higher for excited/laughing)
-- Dynamic content (higher for action)
-- Text overlays (slightly higher)
-- Composition quality
+CRITICAL INSTRUCTIONS FOR FACE DETECTION:
+1. Count ALL visible human faces in the frame
+2. For face_position_x, identify the MAIN SPEAKER or PRIMARY SUBJECT:
+   - In TV news: focus on the reporter/anchor speaking (usually larger face)
+   - In split-screen layouts: focus on the person actually speaking
+   - In picture-in-picture: focus on the main content, not the small inset
+3. Estimate face_position_x as percentage from LEFT edge (0%) to RIGHT edge (100%):
+   * 0-15% = face at far left edge
+   * 15-35% = face on left side  
+   * 35-65% = face is centered
+   * 65-85% = face on right side
+   * 85-100% = face at far right edge
+4. For split-screen with 2 people: set face_position_x to the PRIMARY speaker's position
+5. Only set face_position_x to null if there are NO faces
 
-Important instructions:
-- Count the number of faces visible in the frame and set face_count accordingly
-- If face_count is exactly 1, estimate the horizontal position of the face center as a percentage:
-  * 0-20% = face is on far left edge
-  * 20-40% = face is on left side
-  * 40-60% = face is centered
-  * 60-80% = face is on right side
-  * 80-100% = face is on far right edge
-- If face_count is 0 or more than 1, set face_position_x to null
-- Be precise with the percentage estimate
+BE VERY PRECISE with the percentage - this determines how the video will be cropped.
 
 Respond with ONLY the JSON object, nothing else."""
 
@@ -252,14 +252,14 @@ Respond with ONLY the JSON object, nothing else."""
             contents = [prompt, image_part]
             
             config = {
-                "temperature": 0.3,
+                "temperature": 0.2,  # Lower temperature for more consistent detection
                 "max_output_tokens": 200,
             }
             
             response_text = self._call_with_retry(model_name, contents, config)
             
             result = self._parse_json_response(response_text, default_result)
-            logger.debug(f"Frame analysis: {result}")
+            logger.info(f"🔍 Frame analysis: faces={result.get('face_count')}, pos={result.get('face_position_x')}%, scene={result.get('scene_type')}")
             return result
 
         except Exception as e:

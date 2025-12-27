@@ -289,22 +289,37 @@ class VideoProcessor:
                 logger.debug(f"[CLIP:{clip_id}] Cleaned up temporary frames")
 
     def _determine_crop_strategy(
-        self, frame_analyses: List[dict], threshold: float = 0.7
+        self, frame_analyses: List[dict], threshold: float = 0.5
     ) -> float:
         """
         Determine crop position based on face analysis results.
 
+        IMPROVED ALGORITHM:
+        1. Lowered threshold to 50% (was 70%) - more likely to use face detection
+        2. Also considers frames with ANY faces (not just single face)
+        3. Uses median instead of average for robustness against outliers
+        4. Falls back to center if no valid face positions found
+
         Args:
             frame_analyses: List of frame analysis results
-            threshold: Minimum proportion of frames with single face (default: 0.7 = 70%)
+            threshold: Minimum proportion of frames with valid face position (default: 0.5 = 50%)
 
         Returns:
             Face position as percentage (0.0-1.0), or 0.5 for centered crop
         """
         if not frame_analyses:
+            logger.warning("📍 No frame analyses available, defaulting to center crop")
             return 0.5  # Center
 
-        # Count frames with exactly 1 face and valid position
+        # Collect ALL frames with valid face positions (not just single-face)
+        # This handles split-screen scenarios better
+        frames_with_faces = [
+            a
+            for a in frame_analyses
+            if a.get("face_count", 0) >= 1 and a.get("face_position_x") is not None
+        ]
+
+        # Also track single-face frames specifically
         single_face_frames = [
             a
             for a in frame_analyses
@@ -312,30 +327,64 @@ class VideoProcessor:
         ]
 
         total_frames = len(frame_analyses)
-        single_face_ratio = len(single_face_frames) / total_frames
+        faces_ratio = len(frames_with_faces) / total_frames if total_frames > 0 else 0
+        single_face_ratio = len(single_face_frames) / total_frames if total_frames > 0 else 0
 
-        logger.debug(
-            f"Single face ratio: {single_face_ratio:.2%} ({len(single_face_frames)}/{total_frames})"
+        logger.info(
+            f"📊 Face analysis stats:\n"
+            f"   Total frames: {total_frames}\n"
+            f"   Frames with any face: {len(frames_with_faces)} ({faces_ratio:.1%})\n"
+            f"   Frames with single face: {len(single_face_frames)} ({single_face_ratio:.1%})"
         )
 
-        # If >70% frames have exactly 1 face, calculate average position
-        if single_face_ratio > threshold:
-            # Get all face positions as percentages (0-100)
-            positions = [a["face_position_x"] for a in single_face_frames]
-            # Calculate average position
-            avg_position = sum(positions) / len(positions)
-            # Convert to 0.0-1.0 range
-            position_ratio = avg_position / 100.0
-
-            logger.info(
-                f"Using face-based crop at {avg_position:.1f}% ({position_ratio:.2f}) - ratio: {single_face_ratio:.2%}"
+        # Log individual frame analyses for debugging
+        for i, a in enumerate(frame_analyses):
+            logger.debug(
+                f"   Frame {i+1}: faces={a.get('face_count', 0)}, "
+                f"position={a.get('face_position_x', 'N/A')}%, "
+                f"type={a.get('scene_type', 'unknown')}"
             )
-            return position_ratio
+
+        # Prefer single-face frames if we have enough
+        if single_face_ratio >= threshold:
+            positions = [a["face_position_x"] for a in single_face_frames]
+        elif faces_ratio >= threshold:
+            # Fall back to any face detection
+            positions = [a["face_position_x"] for a in frames_with_faces]
+            logger.info(f"⚠️ Using all-face positions (single face ratio too low)")
         else:
-            logger.info(
-                f"Using centered crop (single face ratio {single_face_ratio:.2%} < {threshold:.2%})"
+            logger.warning(
+                f"📍 Insufficient face data ({faces_ratio:.1%} < {threshold:.1%}), defaulting to center"
             )
             return 0.5  # Center
+
+        # Use MEDIAN instead of average for robustness against outliers
+        # (e.g., one frame with wrong detection won't skew the result)
+        positions_sorted = sorted(positions)
+        n = len(positions_sorted)
+        if n % 2 == 1:
+            median_position = positions_sorted[n // 2]
+        else:
+            median_position = (positions_sorted[n // 2 - 1] + positions_sorted[n // 2]) / 2
+
+        # Also calculate average for logging comparison
+        avg_position = sum(positions) / len(positions)
+
+        # Convert to 0.0-1.0 range
+        position_ratio = median_position / 100.0
+
+        # Clamp to valid range
+        position_ratio = max(0.0, min(1.0, position_ratio))
+
+        logger.info(
+            f"🎯 Face position analysis:\n"
+            f"   Positions detected: {[f'{p:.0f}%' for p in positions]}\n"
+            f"   Median: {median_position:.1f}%\n"
+            f"   Average: {avg_position:.1f}%\n"
+            f"   Using: {median_position:.1f}% ({position_ratio:.2f} ratio)"
+        )
+
+        return position_ratio
 
     def generate_clip(
         self, video_path: str, segment: Dict, output_dir: str, clip_id: str
@@ -368,7 +417,7 @@ class VideoProcessor:
                 temp_cut, clip_id, num_frames=5
             )
             crop_position = self._determine_crop_strategy(
-                segment_analyses, threshold=0.7
+                segment_analyses, threshold=0.5
             )
             logger.info(f"[CLIP:{clip_id}] Selected crop position: {crop_position}")
 
