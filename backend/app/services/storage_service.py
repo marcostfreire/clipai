@@ -35,7 +35,9 @@ class StorageService:
         self.local_path = local_path
         self.r2_bucket_name = r2_bucket_name
         self.r2_public_url = r2_public_url
-        self.use_r2 = all([r2_account_id, r2_access_key_id, r2_secret_access_key, r2_bucket_name])
+        self.use_r2 = all(
+            [r2_account_id, r2_access_key_id, r2_secret_access_key, r2_bucket_name]
+        )
 
         if self.use_r2:
             self.s3_client = boto3.client(
@@ -49,7 +51,9 @@ class StorageService:
                 ),
                 region_name="auto",
             )
-            logger.info(f"Storage initialized with Cloudflare R2 bucket: {r2_bucket_name}")
+            logger.info(
+                f"Storage initialized with Cloudflare R2 bucket: {r2_bucket_name}"
+            )
         else:
             self.s3_client = None
             logger.info(f"Storage initialized with local path: {local_path}")
@@ -115,7 +119,10 @@ class StorageService:
         Returns:
             Local file path
         """
-        if self.use_r2 and (storage_path.startswith("r2://") or storage_path.startswith(self.r2_public_url or "https://")):
+        if self.use_r2 and (
+            storage_path.startswith("r2://")
+            or storage_path.startswith(self.r2_public_url or "https://")
+        ):
             try:
                 # Extract key from path
                 if storage_path.startswith("r2://"):
@@ -149,7 +156,10 @@ class StorageService:
         Returns:
             True if deleted successfully
         """
-        if self.use_r2 and (storage_path.startswith("r2://") or (self.r2_public_url and storage_path.startswith(self.r2_public_url))):
+        if self.use_r2 and (
+            storage_path.startswith("r2://")
+            or (self.r2_public_url and storage_path.startswith(self.r2_public_url))
+        ):
             try:
                 if storage_path.startswith("r2://"):
                     key = storage_path.replace(f"r2://{self.r2_bucket_name}/", "")
@@ -196,7 +206,9 @@ class StorageService:
                             Bucket=self.r2_bucket_name,
                             Delete={"Objects": objects},
                         )
-                        logger.info(f"Deleted {len(objects)} files for video {video_id} from R2")
+                        logger.info(
+                            f"Deleted {len(objects)} files for video {video_id} from R2"
+                        )
 
                 return True
 
@@ -208,6 +220,7 @@ class StorageService:
         local_dir = os.path.join(self.local_path, video_id)
         if os.path.exists(local_dir):
             import shutil
+
             shutil.rmtree(local_dir)
             logger.info(f"Deleted local folder: {local_dir}")
 
@@ -215,7 +228,10 @@ class StorageService:
 
     def file_exists(self, storage_path: str) -> bool:
         """Check if a file exists in storage."""
-        if self.use_r2 and (storage_path.startswith("r2://") or (self.r2_public_url and storage_path.startswith(self.r2_public_url))):
+        if self.use_r2 and (
+            storage_path.startswith("r2://")
+            or (self.r2_public_url and storage_path.startswith(self.r2_public_url))
+        ):
             try:
                 if storage_path.startswith("r2://"):
                     key = storage_path.replace(f"r2://{self.r2_bucket_name}/", "")
@@ -299,6 +315,7 @@ def get_storage_service() -> StorageService:
     global _storage_service
     if _storage_service is None:
         from ..config import settings
+
         _storage_service = StorageService(
             r2_account_id=getattr(settings, "r2_account_id", None),
             r2_access_key_id=getattr(settings, "r2_access_key_id", None),

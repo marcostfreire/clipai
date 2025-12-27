@@ -32,7 +32,7 @@ branding/
 .env.*.local
 logo.png
 logoCopia.png
-
+.env.docker
 # Database
 *.db
 *.sqlite3

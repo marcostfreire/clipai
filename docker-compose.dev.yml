@@ -1,0 +1,108 @@
+version: '3.8'
+
+# Full-stack local development with Docker
+# Usage: docker compose -f docker-compose.dev.yml up --build
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: clipai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clipai_dev
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clipai_dev
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    env_file:
+      - ./backend/.env.docker
+    environment:
+      - RAILWAY_SERVICE_NAME=api
+    volumes:
+      - video_storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - clipai_dev
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+      target: production
+    env_file:
+      - ./backend/.env.docker
+    environment:
+      - RAILWAY_SERVICE_NAME=worker
+    volumes:
+      - video_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - clipai_dev
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api
+        NEXT_PUBLIC_USE_EDGE_PROXY: "false"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_USE_EDGE_PROXY=false
+      - BACKEND_API_URL=http://api:8000/api
+    depends_on:
+      - api
+    networks:
+      - clipai_dev
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  video_storage:
+
+networks:
+  clipai_dev:
+    driver: bridge

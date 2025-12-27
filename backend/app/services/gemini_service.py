@@ -5,7 +5,7 @@ import json
 import base64
 import io
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,60 @@ def _get_client(api_key: str):
         from google import genai
         _genai_client = genai.Client(api_key=api_key)
     return _genai_client
+
+
+def _compute_image_hash(image_path: str) -> Optional[str]:
+    """
+    Compute perceptual hash of an image for deduplication.
+    
+    Uses average hash (aHash) which is fast and good for detecting similar frames.
+    Falls back to difference hash if imagehash not available.
+    """
+    try:
+        import imagehash
+        with Image.open(image_path) as img:
+            # Use perceptual hash - robust to minor changes
+            phash = imagehash.phash(img, hash_size=16)
+            return str(phash)
+    except ImportError:
+        # Fallback: simple average hash implementation
+        logger.warning("imagehash not installed, using fallback hash")
+        try:
+            with Image.open(image_path) as img:
+                img = img.convert('L').resize((16, 16), Image.Resampling.LANCZOS)
+                pixels = list(img.getdata())
+                avg = sum(pixels) / len(pixels)
+                bits = ''.join('1' if p > avg else '0' for p in pixels)
+                return hex(int(bits, 2))
+        except Exception as e:
+            logger.error(f"Failed to compute fallback hash: {e}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to compute image hash: {e}")
+        return None
+
+
+def _hash_distance(hash1: str, hash2: str) -> int:
+    """
+    Calculate Hamming distance between two hashes.
+    Lower distance = more similar images.
+    """
+    try:
+        import imagehash
+        h1 = imagehash.hex_to_hash(hash1)
+        h2 = imagehash.hex_to_hash(hash2)
+        return h1 - h2
+    except ImportError:
+        # Fallback: simple XOR distance
+        try:
+            i1 = int(hash1, 16)
+            i2 = int(hash2, 16)
+            xor = i1 ^ i2
+            return bin(xor).count('1')
+        except:
+            return 999  # Force as different if comparison fails
+    except:
+        return 999
 
 
 class GeminiService:
@@ -337,15 +391,19 @@ Respond with ONLY the JSON object, nothing else."""
             return default_result
 
     def batch_analyze_frames(
-        self, frame_paths: List[str], fps: float = 0.1, use_strict: bool = False
+        self, frame_paths: List[str], fps: float = 0.1, use_strict: bool = False,
+        dedup_threshold: int = 12
     ) -> Dict[float, dict]:
         """
         Analyze multiple frames and create timestamp-indexed results.
+        Uses perceptual hashing to skip similar/duplicate frames.
 
         Args:
             frame_paths: List of frame image paths
             fps: Frames per second used for extraction
             use_strict: Use gemini-2.5-flash instead of flash-lite
+            dedup_threshold: Max hash distance to consider frames as duplicates (0-64, lower=stricter)
+                            Default 12 is good for detecting scene changes while skipping static frames.
 
         Returns:
             Dictionary mapping timestamp to analysis
@@ -354,9 +412,15 @@ Respond with ONLY the JSON object, nothing else."""
 
         results = {}
         total_frames = len(frame_paths)
+        
+        # Deduplication tracking
+        prev_hash: Optional[str] = None
+        prev_analysis: Optional[dict] = None
+        api_calls = 0
+        skipped_frames = 0
 
         logger.info(
-            f"🚀 Starting batch analysis of {total_frames} frames (batch_size={self.batch_size})"
+            f"🚀 Starting batch analysis of {total_frames} frames (dedup_threshold={dedup_threshold})"
         )
         start_time = time.time()
 
@@ -367,6 +431,9 @@ Respond with ONLY the JSON object, nothing else."""
             batch_size_actual = len(batch_frames)
 
             batch_start_time = time.time()
+            batch_api_calls = 0
+            batch_skipped = 0
+            
             logger.info(
                 f"📦 Processing batch {batch_start // self.batch_size + 1}/{(total_frames + self.batch_size - 1) // self.batch_size} ({batch_size_actual} frames)"
             )
@@ -376,26 +443,57 @@ Respond with ONLY the JSON object, nothing else."""
                 frame_idx = batch_start + i
                 timestamp = frame_idx / fps
 
-                frame_start = time.time()
-                analysis = self.analyze_frame(frame_path, use_strict=use_strict)
-                frame_time = time.time() - frame_start
+                # Compute hash for deduplication
+                current_hash = _compute_image_hash(frame_path)
+                
+                # Check if frame is similar to previous
+                is_duplicate = False
+                if prev_hash and current_hash:
+                    distance = _hash_distance(current_hash, prev_hash)
+                    if distance <= dedup_threshold:
+                        is_duplicate = True
+                        skipped_frames += 1
+                        batch_skipped += 1
+                        
+                        # Reuse previous analysis
+                        if prev_analysis:
+                            results[timestamp] = prev_analysis.copy()
+                            logger.debug(
+                                f"  ⏭️ Frame {frame_idx + 1}/{total_frames} at {timestamp:.1f}s - SKIPPED (hash distance: {distance})"
+                            )
+                
+                if not is_duplicate:
+                    # Actually call the API
+                    frame_start = time.time()
+                    analysis = self.analyze_frame(frame_path, use_strict=use_strict)
+                    frame_time = time.time() - frame_start
 
-                results[timestamp] = analysis
+                    results[timestamp] = analysis
+                    prev_analysis = analysis
+                    api_calls += 1
+                    batch_api_calls += 1
 
-                logger.info(
-                    f"  ✓ Frame {frame_idx + 1}/{total_frames} at {timestamp:.1f}s (took {frame_time:.2f}s)"
-                )
+                    logger.info(
+                        f"  ✓ Frame {frame_idx + 1}/{total_frames} at {timestamp:.1f}s (took {frame_time:.2f}s)"
+                    )
+                
+                # Update previous hash
+                prev_hash = current_hash
 
             batch_time = time.time() - batch_start_time
             avg_time_per_frame = batch_time / batch_size_actual
             logger.info(
-                f"📊 Batch completed in {batch_time:.2f}s (avg {avg_time_per_frame:.2f}s/frame)"
+                f"📊 Batch completed in {batch_time:.2f}s - API calls: {batch_api_calls}, Skipped: {batch_skipped}"
             )
 
         total_time = time.time() - start_time
-        avg_overall = total_time / total_frames if total_frames > 0 else 0
+        dedup_rate = (skipped_frames / total_frames * 100) if total_frames > 0 else 0
+        
         logger.info(
-            f"✅ All frames analyzed in {total_time:.2f}s (avg {avg_overall:.2f}s/frame)"
+            f"✅ Analysis complete in {total_time:.2f}s"
+        )
+        logger.info(
+            f"📈 Dedup stats: {api_calls} API calls, {skipped_frames} frames skipped ({dedup_rate:.1f}% savings)"
         )
 
         return results
