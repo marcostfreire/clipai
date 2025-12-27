@@ -89,13 +89,35 @@ def process_video_task(
 
         # Download video from R2 if needed
         video_path = video.file_path
-        if storage.use_r2 and (video_path.startswith("r2://") or (storage.r2_public_url and video_path.startswith(storage.r2_public_url))):
-            local_video_path = storage.get_local_path(video_id, "original.mp4")
+        local_video_path = storage.get_local_path(video_id, "original.mp4")
+        
+        # Check if we need to download from R2
+        needs_download = False
+        
+        if storage.use_r2:
+            if video_path.startswith("r2://") or (storage.r2_public_url and video_path.startswith(storage.r2_public_url)):
+                # Path is explicitly R2
+                needs_download = True
+            elif not os.path.exists(video_path):
+                # Local path doesn't exist - try to download from R2
+                logger.info(f"[VIDEO:{video_id}] Local file not found at {video_path}, checking R2...")
+                needs_download = True
+                # Construct R2 key from video_id
+                video_path = f"r2://{storage.r2_bucket_name}/{video_id}/original.mp4"
+        
+        if needs_download and storage.use_r2:
             logger.info(f"[VIDEO:{video_id}] Downloading from R2 to {local_video_path}")
-            video_path = storage.download_file(video.file_path, local_video_path)
-            logger.info(f"[VIDEO:{video_id}] Download completed")
+            try:
+                storage.download_file(video_path, local_video_path)
+                video_path = local_video_path
+                logger.info(f"[VIDEO:{video_id}] Download completed")
+            except Exception as e:
+                logger.error(f"[VIDEO:{video_id}] Failed to download from R2: {e}")
+                raise ValueError(f"Video file not found locally or in R2: {video_path}")
         else:
-            # Local file
+            # Local file - verify it exists
+            if not os.path.exists(video_path):
+                raise ValueError(f"Video file not found: {video_path}")
             local_video_path = video_path
 
         # Initialize services
