@@ -35,9 +35,18 @@ class StorageService:
         self.local_path = local_path
         self.r2_bucket_name = r2_bucket_name
         self.r2_public_url = r2_public_url
+        
+        # Debug logging for R2 configuration
+        logger.info(f"Storage init - r2_account_id: {'SET' if r2_account_id else 'NOT SET'}")
+        logger.info(f"Storage init - r2_access_key_id: {'SET' if r2_access_key_id else 'NOT SET'}")
+        logger.info(f"Storage init - r2_secret_access_key: {'SET' if r2_secret_access_key else 'NOT SET'}")
+        logger.info(f"Storage init - r2_bucket_name: {r2_bucket_name or 'NOT SET'}")
+        
         self.use_r2 = all(
             [r2_account_id, r2_access_key_id, r2_secret_access_key, r2_bucket_name]
         )
+        
+        logger.info(f"Storage init - use_r2: {self.use_r2}")
 
         if self.use_r2:
             self.s3_client = boto3.client(

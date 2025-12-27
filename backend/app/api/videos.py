@@ -233,6 +233,7 @@ async def upload_video(
 
         # Create database record
         storage = get_storage_service()
+        logger.info(f"[VIDEO:{video_id}] Storage service: use_r2={storage.use_r2}, bucket={storage.r2_bucket_name}")
         
         # Upload to R2 if configured
         if storage.use_r2:
