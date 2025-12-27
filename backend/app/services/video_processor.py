@@ -214,13 +214,23 @@ class VideoProcessor:
         segments.sort(key=lambda x: x["virality_score"], reverse=True)
         selected = segments[:top_n]
 
+        # Log all segments before filtering for debugging
+        logger.info(f"📊 All {len(segments)} segments before filtering:")
+        for i, s in enumerate(segments):
+            logger.info(f"  [{i+1}] Score: {s['virality_score']:.2f}, Time: {s['start_time']:.1f}s-{s['end_time']:.1f}s, Reason: {s.get('reason', 'N/A')[:50]}")
+
         # Filter by minimum score
         selected = [
             s for s in selected if s["virality_score"] >= self.min_virality_score
         ]
 
+        # Log filtering result
+        filtered_count = len(segments[:top_n]) - len(selected)
+        if filtered_count > 0:
+            logger.warning(f"⚠️ Filtered out {filtered_count} segments with scores < {self.min_virality_score}")
+
         logger.info(
-            f"Selected {len(selected)} segments with scores >= {self.min_virality_score}"
+            f"✅ Selected {len(selected)} segments with scores >= {self.min_virality_score}"
         )
 
         return selected

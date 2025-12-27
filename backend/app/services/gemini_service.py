@@ -327,6 +327,10 @@ Respond with ONLY the JSON object, nothing else."""
             result = self._parse_json_response(response_text, {"moments": []})
             moments = result.get("moments", [])
 
+            logger.info(f"📺 Gemini returned {len(moments)} raw moments")
+            for i, m in enumerate(moments):
+                logger.info(f"  [{i+1}] Score: {m.get('virality_score', 0)}, Time: {m.get('start_time', 0):.1f}s-{m.get('end_time', 0):.1f}s, Type: {m.get('hook_type', 'N/A')}")
+
             # Validate and clamp timestamps
             validated_moments = []
             for moment in moments:
@@ -334,8 +338,10 @@ Respond with ONLY the JSON object, nothing else."""
                 end = moment.get("end_time", 0)
                 if start >= 0 and end <= duration and start < end:
                     validated_moments.append(moment)
+                else:
+                    logger.warning(f"⚠️ Invalid moment timestamps: {start:.1f}s-{end:.1f}s (duration: {duration:.1f}s)")
 
-            logger.info(f"Identified {len(validated_moments)} viral moments")
+            logger.info(f"✅ Validated {len(validated_moments)} viral moments")
             return validated_moments
 
         except Exception as e:

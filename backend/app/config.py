@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     frames_per_second: float = 0.1  # 1 frame every 10 seconds (optimized for cost/performance)
     clip_min_duration: int = 30
     clip_max_duration: int = 60
-    min_virality_score: float = 5.0
+    min_virality_score: float = 3.0  # Lowered from 5.0 to avoid rejecting good clips
     subtitle_delay_seconds: float = 0.0
 
     # Performance optimization
