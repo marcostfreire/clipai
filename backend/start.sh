@@ -12,5 +12,5 @@ else
     echo "Running database migrations..."
     alembic upgrade head
     echo "Starting API server..."
-    exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 50 --limit-max-requests 200
+    exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 100
 fi

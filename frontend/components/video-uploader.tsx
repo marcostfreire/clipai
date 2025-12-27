@@ -133,16 +133,50 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
     } catch (error: any) {
       console.error('URL upload error:', error);
 
-      // Check for paywall error
+      // Check for specific error types
+      const errorData = error.response?.data?.detail;
+      
       if (error.response?.status === 402) {
-        const errorData = error.response.data?.detail;
         if (errorData?.error === 'subscription_limit_reached') {
           setPaywallReason(errorData.message);
           setPaywallType('limit_reached');
           setShowPaywall(true);
         }
+      } else if (error.response?.status === 400 && errorData?.error) {
+        // Handle video_too_large and video_too_long errors with friendly messages
+        if (errorData.error === 'video_too_large') {
+          toast.error(
+            <div className="space-y-1">
+              <p className="font-medium">Vídeo muito grande (~{errorData.estimated_size_mb}MB)</p>
+              <p className="text-sm">Limite para URL: {errorData.max_size_mb}MB</p>
+              <p className="text-sm text-muted-foreground">Baixe o vídeo manualmente e faça upload do arquivo.</p>
+            </div>,
+            { duration: 8000 }
+          );
+        } else if (errorData.error === 'video_too_long') {
+          toast.error(
+            <div className="space-y-1">
+              <p className="font-medium">Vídeo muito longo ({Math.floor(errorData.duration_seconds / 60)}min)</p>
+              <p className="text-sm">Limite para URL: {Math.floor(errorData.max_duration_seconds / 60)} minutos</p>
+              <p className="text-sm text-muted-foreground">Baixe o vídeo manualmente e faça upload do arquivo.</p>
+            </div>,
+            { duration: 8000 }
+          );
+        } else {
+          toast.error(errorData.message || errorData || 'Erro ao carregar vídeo da URL');
+        }
+      } else if (error.response?.status === 504) {
+        toast.error(
+          <div className="space-y-1">
+            <p className="font-medium">Timeout no download</p>
+            <p className="text-sm">O vídeo é muito grande para baixar via URL.</p>
+            <p className="text-sm text-muted-foreground">Baixe o vídeo manualmente e faça upload do arquivo.</p>
+          </div>,
+          { duration: 8000 }
+        );
       } else {
-        toast.error(error.response?.data?.detail || 'Erro ao carregar vídeo da URL');
+        const message = typeof errorData === 'string' ? errorData : errorData?.message || 'Erro ao carregar vídeo da URL';
+        toast.error(message);
       }
     } finally {
       setIsUploading(false);
@@ -260,7 +294,9 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Cole a URL de um vídeo do YouTube para processar
+                    Cole a URL de um vídeo do YouTube (máx. 20 min / 200MB)
+                    <br />
+                    Para vídeos maiores, baixe manualmente e faça upload do arquivo
                   </p>
                 </>
               )}

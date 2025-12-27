@@ -158,6 +158,76 @@ async def upload_video(
             
             logger.info(f"[VIDEO:{video_id}] Downloading from URL: {url}")
 
+            # First, get video metadata WITHOUT downloading to check size/duration
+            logger.info(f"[VIDEO:{video_id}] Checking video metadata...")
+            meta_opts = {
+                "format": "best[ext=mp4]/best",
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 15,
+            }
+            
+            try:
+                with yt_dlp.YoutubeDL(meta_opts) as ydl:
+                    meta_info = ydl.extract_info(url, download=False)
+                    
+                    video_title = meta_info.get("title", "Vídeo")
+                    video_duration = meta_info.get("duration", 0)  # seconds
+                    
+                    # Estimate file size from format info
+                    estimated_size_mb = 0
+                    if meta_info.get("filesize"):
+                        estimated_size_mb = meta_info["filesize"] / (1024 * 1024)
+                    elif meta_info.get("filesize_approx"):
+                        estimated_size_mb = meta_info["filesize_approx"] / (1024 * 1024)
+                    else:
+                        # Estimate: ~1MB per 10 seconds for good quality video
+                        estimated_size_mb = (video_duration / 10) * 1.5
+                    
+                    logger.info(f"[VIDEO:{video_id}] Metadata: {video_title}, {video_duration}s, ~{estimated_size_mb:.0f}MB estimated")
+                    
+                    # Check limits BEFORE downloading
+                    # Vercel free tier has 30s timeout, download at ~7MB/s = 200MB max
+                    MAX_DOWNLOAD_SIZE_MB = 200
+                    MAX_DURATION_SECONDS = 20 * 60  # 20 minutes
+                    
+                    if estimated_size_mb > MAX_DOWNLOAD_SIZE_MB:
+                        if os.path.exists(video_dir):
+                            shutil.rmtree(video_dir)
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "video_too_large",
+                                "message": f"Vídeo muito grande para download via URL (~{estimated_size_mb:.0f}MB). Limite: {MAX_DOWNLOAD_SIZE_MB}MB. Para vídeos maiores, baixe manualmente e faça upload do arquivo.",
+                                "estimated_size_mb": round(estimated_size_mb),
+                                "max_size_mb": MAX_DOWNLOAD_SIZE_MB,
+                                "video_title": video_title,
+                                "suggestion": "download_manually"
+                            }
+                        )
+                    
+                    if video_duration > MAX_DURATION_SECONDS:
+                        if os.path.exists(video_dir):
+                            shutil.rmtree(video_dir)
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "video_too_long",
+                                "message": f"Vídeo muito longo ({video_duration // 60}min). Limite para URL: {MAX_DURATION_SECONDS // 60} minutos. Para vídeos maiores, baixe manualmente e faça upload.",
+                                "duration_seconds": video_duration,
+                                "max_duration_seconds": MAX_DURATION_SECONDS,
+                                "video_title": video_title,
+                                "suggestion": "download_manually"
+                            }
+                        )
+                    
+                    logger.info(f"[VIDEO:{video_id}] Video within limits, proceeding with download")
+                    
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"[VIDEO:{video_id}] Could not get metadata, proceeding anyway: {e}")
+
             ydl_opts = {
                 "format": "best[ext=mp4]/best",  # Fallback to any best format
                 "outtmpl": file_path,

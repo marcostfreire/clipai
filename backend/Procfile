@@ -1,2 +1,2 @@
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --limit-concurrency 50 --limit-max-requests 200
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --limit-concurrency 100
 worker: celery -A app.tasks.celery_tasks worker --loglevel=info --concurrency=1 --pool=solo --prefetch-multiplier=1
