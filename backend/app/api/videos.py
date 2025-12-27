@@ -190,18 +190,45 @@ async def upload_video(
                 logger.info(f"[VIDEO:{video_id}] Duration: {duration:.2f}s")
 
             except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e)
                 logger.error(f"[VIDEO:{video_id}] yt-dlp DownloadError: {e}")
                 if os.path.exists(video_dir):
                     shutil.rmtree(video_dir)
-                raise HTTPException(
-                    status_code=400, detail=f"Não foi possível baixar o vídeo. Verifique se a URL é válida e pública. Erro: {str(e)}"
-                )
+                
+                # Improve error messages for common issues
+                if "not made this video available in your country" in error_msg:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Este vídeo está bloqueado por região e não pode ser baixado do nosso servidor. Por favor, baixe o vídeo manualmente e faça upload do arquivo."
+                    )
+                elif "Video unavailable" in error_msg or "Private video" in error_msg:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Este vídeo não está disponível. Verifique se o vídeo é público e a URL está correta."
+                    )
+                elif "Sign in" in error_msg or "age" in error_msg.lower():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Este vídeo requer login ou verificação de idade. Por favor, baixe o vídeo manualmente e faça upload do arquivo."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400, detail=f"Não foi possível baixar o vídeo: {error_msg}"
+                    )
             except Exception as e:
+                error_msg = str(e)
                 logger.error(f"[VIDEO:{video_id}] Error downloading video: {e}", exc_info=True)
                 if os.path.exists(video_dir):
                     shutil.rmtree(video_dir)
+                
+                # Check for geo-restriction in generic exceptions too
+                if "not made this video available in your country" in error_msg:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Este vídeo está bloqueado por região e não pode ser baixado do nosso servidor. Por favor, baixe o vídeo manualmente e faça upload do arquivo."
+                    )
                 raise HTTPException(
-                    status_code=400, detail=f"Falha ao baixar vídeo: {str(e)}"
+                    status_code=400, detail=f"Falha ao baixar vídeo: {error_msg}"
                 )
 
         # Create database record
