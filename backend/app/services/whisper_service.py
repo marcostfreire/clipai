@@ -189,28 +189,51 @@ class WhisperService:
         return adjusted_start, adjusted_end
 
     def extract_segment_transcript(
-        self, transcript: List[Dict], start_time: float, end_time: float
+        self, transcript: List[Dict], start_time: float, end_time: float,
+        convert_to_relative: bool = True
     ) -> List[Dict]:
         """
         Extract transcript segment within time range.
 
         Args:
             transcript: Full transcript
-            start_time: Start time in seconds
-            end_time: End time in seconds
+            start_time: Start time in seconds (absolute, from original video)
+            end_time: End time in seconds (absolute, from original video)
+            convert_to_relative: If True, converts timestamps to be relative to start_time (default: True)
 
         Returns:
-            List of transcript entries within range
+            List of transcript entries within range, with timestamps relative to segment start
         """
         segment = []
+        segment_duration = end_time - start_time
 
         for entry in transcript:
             if entry["start"] >= start_time and entry["end"] <= end_time:
-                segment.append(entry)
+                # Fully contained in segment
+                if convert_to_relative:
+                    segment.append({
+                        "start": entry["start"] - start_time,
+                        "end": entry["end"] - start_time,
+                        "text": entry["text"],
+                        "confidence": entry.get("confidence", 0.0),
+                    })
+                else:
+                    segment.append(entry)
             elif entry["start"] < end_time and entry["end"] > start_time:
-                # Partial overlap
-                segment.append(entry)
+                # Partial overlap - clamp to segment boundaries
+                if convert_to_relative:
+                    rel_start = max(0.0, entry["start"] - start_time)
+                    rel_end = min(segment_duration, entry["end"] - start_time)
+                    segment.append({
+                        "start": rel_start,
+                        "end": rel_end,
+                        "text": entry["text"],
+                        "confidence": entry.get("confidence", 0.0),
+                    })
+                else:
+                    segment.append(entry)
 
+        logger.debug(f"Extracted {len(segment)} transcript entries for segment {start_time:.2f}s-{end_time:.2f}s (relative={convert_to_relative})")
         return segment
 
     def get_word_level_transcript(self, result: Dict) -> List[Dict]:

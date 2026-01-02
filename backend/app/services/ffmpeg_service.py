@@ -500,8 +500,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if word_level and transcript and "word" in transcript[0]:
                 # Word-level subtitles (TikTok style)
                 logger.info(
-                    f"Creating word-level subtitles with {words_per_group} words per group"
+                    f"Creating word-level subtitles with {words_per_group} words per group, delay={delay_seconds}s"
                 )
+                
+                # Debug: Log first and last word timestamps to verify they're relative (starting near 0)
+                if transcript:
+                    first_word = transcript[0]
+                    last_word = transcript[-1]
+                    logger.info(
+                        f"📝 Subtitle timestamp range: {first_word['start']:.2f}s - {last_word['end']:.2f}s "
+                        f"(should start near 0 if relative timestamps are correct)"
+                    )
+                    # Warning if timestamps look absolute (not starting near 0)
+                    if first_word['start'] > 10.0:
+                        logger.warning(
+                            f"⚠️ SUBTITLE SYNC WARNING: First word starts at {first_word['start']:.2f}s - "
+                            f"timestamps may be ABSOLUTE instead of RELATIVE to clip start!"
+                        )
 
                 i = 0
                 while i < len(transcript):

@@ -306,3 +306,97 @@ def cleanup_old_videos_task(days_old: int = 7) -> dict:
 
     finally:
         db.close()
+
+
+@celery_app.task(name="detect_stuck_videos_task")
+def detect_stuck_videos_task(stuck_threshold_minutes: int = 60) -> dict:
+    """
+    Detect and reset videos stuck in 'processing' status.
+    
+    This task identifies videos that have been in 'processing' status for too long
+    (likely due to worker crash, timeout, or other failures) and resets them to 'failed'
+    so they can be reprocessed.
+
+    Args:
+        stuck_threshold_minutes: Minutes after which a processing video is considered stuck.
+                                 Default: 60 minutes (1 hour, matching task_time_limit)
+
+    Returns:
+        Dictionary with detection/reset results
+    """
+    db: Session = SessionLocal()
+
+    try:
+        from datetime import datetime, timedelta
+
+        threshold_time = datetime.utcnow() - timedelta(minutes=stuck_threshold_minutes)
+
+        # Find videos stuck in 'processing' status
+        stuck_videos = db.query(Video).filter(
+            Video.status == "processing",
+            Video.updated_at < threshold_time
+        ).all()
+
+        reset_count = 0
+        reset_video_ids = []
+        
+        for video in stuck_videos:
+            try:
+                # Calculate how long it's been stuck
+                time_stuck = datetime.utcnow() - (video.updated_at or video.created_at)
+                hours_stuck = time_stuck.total_seconds() / 3600
+
+                logger.warning(
+                    f"[VIDEO:{video.id}] Detected stuck video - "
+                    f"processing for {hours_stuck:.1f} hours, progress: {video.progress}%"
+                )
+
+                # Reset to failed status with descriptive error
+                video.status = "failed"
+                video.error_message = (
+                    f"Processing timeout: video was stuck in processing for "
+                    f"{hours_stuck:.1f} hours. Last progress: {video.progress}%. "
+                    f"You can try reprocessing this video."
+                )
+                
+                reset_count += 1
+                reset_video_ids.append(video.id)
+
+            except Exception as e:
+                logger.error(f"Error resetting stuck video {video.id}: {e}")
+
+        if reset_count > 0:
+            db.commit()
+            logger.info(f"Reset {reset_count} stuck videos: {reset_video_ids}")
+
+        return {
+            "checked_threshold_minutes": stuck_threshold_minutes,
+            "stuck_videos_found": len(stuck_videos),
+            "videos_reset": reset_count,
+            "reset_video_ids": reset_video_ids,
+            "check_time": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Stuck video detection failed: {e}", exc_info=True)
+        raise
+
+    finally:
+        db.close()
+
+
+# Celery Beat schedule for periodic tasks
+celery_app.conf.beat_schedule = {
+    # Run stuck video detection every 15 minutes
+    'detect-stuck-videos-every-15-minutes': {
+        'task': 'detect_stuck_videos_task',
+        'schedule': 900.0,  # 15 minutes in seconds
+        'args': (60,),  # stuck_threshold_minutes = 60
+    },
+    # Run cleanup every 24 hours at midnight
+    'cleanup-old-videos-daily': {
+        'task': 'cleanup_old_videos_task',
+        'schedule': 86400.0,  # 24 hours in seconds
+        'args': (7,),  # days_old = 7
+    },
+}

@@ -13,6 +13,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
 import { createCheckoutSession, SubscriptionLimits } from '@/lib/api';
+import { STRIPE_PRICE_IDS } from '@/lib/config';
 import { toast } from 'sonner';
 
 interface PaywallModalProps {
@@ -22,11 +23,6 @@ interface PaywallModalProps {
   reason?: string;
   type?: 'limit_reached' | 'duration_exceeded' | 'feature_locked';
 }
-
-const PRICE_IDS = {
-  starter: 'price_1SUSowCMwpJ5YuyfvZq5iXYZ',  // R$149/month
-  pro: 'price_1SUSowCMwpJ5YuyfiRMdGv15',       // R$499/month
-};
 
 export function PaywallModal({
   isOpen,
@@ -40,7 +36,7 @@ export function PaywallModal({
   const handleUpgrade = async (plan: 'starter' | 'pro') => {
     setLoading(plan);
     try {
-      const priceId = PRICE_IDS[plan];
+      const priceId = STRIPE_PRICE_IDS[plan];
       const response = await createCheckoutSession(
         priceId,
         `${window.location.origin}/videos?upgraded=true`,

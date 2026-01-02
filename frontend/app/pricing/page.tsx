@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { Check, Zap, Rocket, Star, Crown } from 'lucide-react';
 import { API_BASE_URL, getSubscriptionStatus, isAuthenticated, SubscriptionStatus } from '@/lib/api';
+import { STRIPE_PRICE_IDS, PLAN_LIMITS, PLAN_PRICING, PlanId } from '@/lib/config';
 import Link from 'next/link';
 
 interface PricingTier {
-  id: string;
+  id: PlanId;
   name: string;
   description: string;
   price: number;
@@ -29,26 +30,26 @@ interface PricingTier {
 const pricingTiers: PricingTier[] = [
   {
     id: 'free',
-    name: 'Free',
-    description: 'Perfeito para testar a plataforma',
-    price: 0,
-    currency: 'BRL',
-    interval: '/mês',
-    priceId: 'price_1SUSZdCMwpJ5YuyfbFDEQh5A',
+    name: PLAN_PRICING.free.name,
+    description: PLAN_PRICING.free.description,
+    price: PLAN_PRICING.free.price,
+    currency: PLAN_PRICING.free.currency,
+    interval: PLAN_PRICING.free.interval,
+    priceId: STRIPE_PRICE_IDS.free,
     icon: <Star className="w-6 h-6" />,
     limits: {
-      videos: 2,
-      clips: '3 clips por vídeo',
-      watermark: true,
+      videos: PLAN_LIMITS.free.videosPerMonth,
+      clips: PLAN_LIMITS.free.clipsPerVideo === 'unlimited' ? 'Ilimitados' : `${PLAN_LIMITS.free.clipsPerVideo} clips por vídeo`,
+      watermark: PLAN_LIMITS.free.watermark,
       queue: 'Padrão',
-      api: false,
-      maxDuration: 30,
+      api: PLAN_LIMITS.free.apiAccess,
+      maxDuration: PLAN_LIMITS.free.maxDurationMinutes,
     },
     features: [
-      '2 vídeos por mês',
-      'Até 3 clips por vídeo',
+      `${PLAN_LIMITS.free.videosPerMonth} vídeos por mês`,
+      `Até ${PLAN_LIMITS.free.clipsPerVideo} clips por vídeo`,
       'Marca d\'água ClipAI',
-      'Vídeos até 30 minutos',
+      `Vídeos até ${PLAN_LIMITS.free.maxDurationMinutes} minutos`,
       'Processamento com IA',
       'Legendas automáticas',
       'Detecção de momentos virais',
@@ -57,27 +58,27 @@ const pricingTiers: PricingTier[] = [
   },
   {
     id: 'starter',
-    name: 'Starter',
-    description: 'Ideal para criadores individuais',
-    price: 149,
-    currency: 'BRL',
-    interval: '/mês',
-    priceId: 'price_1SUSowCMwpJ5YuyfvZq5iXYZ',
+    name: PLAN_PRICING.starter.name,
+    description: PLAN_PRICING.starter.description,
+    price: PLAN_PRICING.starter.price,
+    currency: PLAN_PRICING.starter.currency,
+    interval: PLAN_PRICING.starter.interval,
+    priceId: STRIPE_PRICE_IDS.starter,
     highlighted: true,
     icon: <Zap className="w-6 h-6" />,
     limits: {
-      videos: 12,
+      videos: PLAN_LIMITS.starter.videosPerMonth,
       clips: 'Ilimitados',
-      watermark: false,
+      watermark: PLAN_LIMITS.starter.watermark,
       queue: 'Padrão',
-      api: false,
-      maxDuration: 60,
+      api: PLAN_LIMITS.starter.apiAccess,
+      maxDuration: PLAN_LIMITS.starter.maxDurationMinutes,
     },
     features: [
-      '12 vídeos por mês',
+      `${PLAN_LIMITS.starter.videosPerMonth} vídeos por mês`,
       'Clips ilimitados por vídeo',
       'Sem marca d\'água',
-      'Vídeos até 60 minutos',
+      `Vídeos até ${PLAN_LIMITS.starter.maxDurationMinutes} minutos`,
       'Processamento com IA avançada',
       'Legendas automáticas',
       'Detecção de momentos virais',
@@ -88,26 +89,26 @@ const pricingTiers: PricingTier[] = [
   },
   {
     id: 'pro',
-    name: 'Pro',
-    description: 'Para agências e alto volume',
-    price: 499,
-    currency: 'BRL',
-    interval: '/mês',
-    priceId: 'price_1SUSowCMwpJ5YuyfiRMdGv15',
+    name: PLAN_PRICING.pro.name,
+    description: PLAN_PRICING.pro.description,
+    price: PLAN_PRICING.pro.price,
+    currency: PLAN_PRICING.pro.currency,
+    interval: PLAN_PRICING.pro.interval,
+    priceId: STRIPE_PRICE_IDS.pro,
     icon: <Rocket className="w-6 h-6" />,
     limits: {
-      videos: 50,
+      videos: PLAN_LIMITS.pro.videosPerMonth,
       clips: 'Ilimitados',
-      watermark: false,
+      watermark: PLAN_LIMITS.pro.watermark,
       queue: 'Prioritária',
-      api: true,
-      maxDuration: 120,
+      api: PLAN_LIMITS.pro.apiAccess,
+      maxDuration: PLAN_LIMITS.pro.maxDurationMinutes,
     },
     features: [
-      '50 vídeos por mês',
+      `${PLAN_LIMITS.pro.videosPerMonth} vídeos por mês`,
       'Clips ilimitados por vídeo',
       'Sem marca d\'água',
-      'Vídeos até 120 minutos',
+      `Vídeos até ${PLAN_LIMITS.pro.maxDurationMinutes} minutos`,
       'Acesso via API',
       'Fila prioritária',
       'Processamento mais rápido',

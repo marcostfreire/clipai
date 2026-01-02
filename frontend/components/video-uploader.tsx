@@ -56,9 +56,11 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
   }, [limits]);
 
   const checkCanUpload = (): boolean => {
-    // If not authenticated, allow upload (backend will handle anonymous users)
+    // If not authenticated, redirect to login
     if (!isAuthenticated()) {
-      return true;
+      toast.error('Faça login para enviar vídeos');
+      window.location.href = '/auth';
+      return false;
     }
 
     // If we have limits info and user can't upload, show paywall
@@ -255,7 +257,7 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
                   <p className="text-xs text-muted-foreground">
                     Formatos aceitos: MP4, MOV, AVI, MKV, WEBM
                     <br />
-                    Tamanho máximo: 500 MB | Duração máxima: {limits ? limits.limits.max_video_duration_minutes : 60} minutos
+                    Tamanho máximo: 2 GB | Duração máxima: {limits ? limits.limits.max_video_duration_minutes : 120} minutos
                   </p>
                 </div>
               )}
@@ -294,9 +296,7 @@ export function VideoUploader({ onSuccess }: { onSuccess: (videoId: string) => v
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Cole a URL de um vídeo do YouTube (máx. 20 min / 200MB)
-                    <br />
-                    Para vídeos maiores, baixe manualmente e faça upload do arquivo
+                    Cole a URL de um vídeo do YouTube (máx. 1 hora / 1GB)
                   </p>
                 </>
               )}

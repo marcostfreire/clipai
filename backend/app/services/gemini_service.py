@@ -141,12 +141,13 @@ class GeminiService:
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                # Build generation config
+                # Build generation config with JSON response format
                 gen_config = None
                 if config:
                     gen_config = types.GenerateContentConfig(
                         temperature=config.get("temperature", 0.3),
-                        max_output_tokens=config.get("max_output_tokens", 500),
+                        max_output_tokens=config.get("max_output_tokens", 1000),
+                        response_mime_type="application/json",  # Force pure JSON output
                     )
                 
                 response = self._client.models.generate_content(
@@ -165,7 +166,7 @@ class GeminiService:
         raise last_error
 
     def _parse_json_response(self, response_text: str, default: dict) -> dict:
-        """Parse JSON from response, handling markdown code blocks."""
+        """Parse JSON from response, handling markdown code blocks and truncated responses."""
         text = response_text.strip()
         
         # Remove markdown code blocks if present
@@ -173,17 +174,94 @@ class GeminiService:
             lines = text.split("\n")
             # Remove first line (```json or ```)
             lines = lines[1:]
-            # Remove last line (```)
-            if lines and lines[-1].strip() == "```":
+            # Remove last line (```) if present
+            if lines and lines[-1].strip().startswith("```"):
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
         
+        # Try to parse as-is first
         try:
             return json.loads(text)
         except json.JSONDecodeError as e:
+            # Try to repair truncated JSON
+            repaired = self._try_repair_json(text, default)
+            if repaired != default:
+                logger.warning(f"Repaired truncated JSON response")
+                return repaired
+            
             logger.error(f"Failed to parse Gemini response as JSON: {e}")
-            logger.error(f"Response was: {response_text[:500]}")
+            logger.error(f"Response was: {response_text[:200]}...")
             return default
+    
+    def _try_repair_json(self, text: str, default: dict) -> dict:
+        """Attempt to repair truncated JSON responses."""
+        import re
+        
+        # If it looks like it was truncated mid-response, try to extract what we can
+        text = text.strip()
+        
+        # For frame analysis - try to extract individual fields
+        if '"has_face"' in text:
+            result = default.copy()
+            
+            # Extract has_face
+            match = re.search(r'"has_face"\s*:\s*(true|false)', text, re.IGNORECASE)
+            if match:
+                result["has_face"] = match.group(1).lower() == "true"
+            
+            # Extract face_count
+            match = re.search(r'"face_count"\s*:\s*(\d+)', text)
+            if match:
+                result["face_count"] = int(match.group(1))
+            
+            # Extract face_position_x
+            match = re.search(r'"face_position_x"\s*:\s*(\d+(?:\.\d+)?|null)', text)
+            if match:
+                val = match.group(1)
+                result["face_position_x"] = None if val == "null" else float(val)
+            
+            # Extract expression
+            match = re.search(r'"expression"\s*:\s*"(\w+)"', text)
+            if match:
+                result["expression"] = match.group(1)
+            
+            # Extract scene_type
+            match = re.search(r'"scene_type"\s*:\s*"([\w_]+)"', text)
+            if match:
+                result["scene_type"] = match.group(1)
+            
+            # Extract engagement_score
+            match = re.search(r'"engagement_score"\s*:\s*(\d+(?:\.\d+)?)', text)
+            if match:
+                result["engagement_score"] = float(match.group(1))
+            
+            # Only return if we extracted something useful
+            if result.get("has_face") is not None or result.get("face_count", 0) > 0:
+                return result
+        
+        # For viral moments - try to extract the moments array
+        if '"moments"' in text:
+            # Try to find complete moment objects
+            moments = []
+            # Find all complete moment objects using regex
+            pattern = r'\{[^{}]*"start_time"\s*:\s*([\d.]+)[^{}]*"end_time"\s*:\s*([\d.]+)[^{}]*"virality_score"\s*:\s*([\d.]+)[^{}]*\}'
+            for match in re.finditer(pattern, text, re.DOTALL):
+                try:
+                    moments.append({
+                        "start_time": float(match.group(1)),
+                        "end_time": float(match.group(2)),
+                        "virality_score": float(match.group(3)),
+                        "reason": "extracted from truncated response",
+                        "keywords": [],
+                        "hook_type": "insight"
+                    })
+                except:
+                    pass
+            
+            if moments:
+                return {"moments": moments}
+        
+        return default
 
     def analyze_frame(self, image_path: str, use_strict: bool = False) -> dict:
         """
@@ -253,7 +331,7 @@ Respond with ONLY the JSON object, nothing else."""
             
             config = {
                 "temperature": 0.2,  # Lower temperature for more consistent detection
-                "max_output_tokens": 200,
+                "max_output_tokens": 500,  # Increased from 200 to prevent truncation
             }
             
             response_text = self._call_with_retry(model_name, contents, config)
@@ -314,12 +392,12 @@ Look for:
 Each moment should be 30-60 seconds. Ensure start_time and end_time are within 0-{duration} seconds.
 Respond with ONLY the JSON object, nothing else."""
 
-            # Select model
-            model_name = self.model_strict if use_strict else self.model_default
+            # Select model - use strict model for better reasoning on viral detection
+            model_name = self.model_strict  # Always use gemini-2.5-flash for viral detection
             
             config = {
                 "temperature": 0.4,
-                "max_output_tokens": 1000,
+                "max_output_tokens": 4000,  # Increased from 1000 - need space for 5 detailed moments
             }
             
             response_text = self._call_with_retry(model_name, [prompt], config)

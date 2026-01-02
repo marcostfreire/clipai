@@ -34,7 +34,7 @@ class StorageService:
         """
         self.local_path = local_path
         self.r2_bucket_name = r2_bucket_name
-        self.r2_public_url = r2_public_url
+        self.r2_public_url = r2_public_url.rstrip('/') if r2_public_url else None
         
         # Debug logging for R2 configuration
         logger.info(f"Storage init - r2_account_id: {'SET' if r2_account_id else 'NOT SET'}")
@@ -69,6 +69,38 @@ class StorageService:
 
         # Ensure local path exists for temp files
         os.makedirs(local_path, exist_ok=True)
+
+    def is_r2_path(self, path: str) -> bool:
+        """
+        Check if a path refers to R2 storage (vs local).
+        
+        Normalizes detection of R2 paths regardless of format:
+        - r2://bucket/key
+        - https://public-url.com/key
+        - Direct R2 public URLs
+        
+        Args:
+            path: Storage path to check
+            
+        Returns:
+            True if path is an R2 path, False if local
+        """
+        if not path:
+            return False
+        
+        # Check for explicit r2:// scheme
+        if path.startswith("r2://"):
+            return True
+        
+        # Check for public URL prefix
+        if self.r2_public_url and path.startswith(self.r2_public_url):
+            return True
+        
+        # Check for common R2/S3 URL patterns
+        if "r2.cloudflarestorage.com" in path:
+            return True
+        
+        return False
 
     def get_local_path(self, video_id: str, filename: str = "") -> str:
         """Get local path for a video file (for temp processing)."""
@@ -128,10 +160,7 @@ class StorageService:
         Returns:
             Local file path
         """
-        if self.use_r2 and (
-            storage_path.startswith("r2://")
-            or storage_path.startswith(self.r2_public_url or "https://")
-        ):
+        if self.use_r2 and self.is_r2_path(storage_path):
             try:
                 # Extract key from path
                 if storage_path.startswith("r2://"):
@@ -165,10 +194,7 @@ class StorageService:
         Returns:
             True if deleted successfully
         """
-        if self.use_r2 and (
-            storage_path.startswith("r2://")
-            or (self.r2_public_url and storage_path.startswith(self.r2_public_url))
-        ):
+        if self.use_r2 and self.is_r2_path(storage_path):
             try:
                 if storage_path.startswith("r2://"):
                     key = storage_path.replace(f"r2://{self.r2_bucket_name}/", "")
@@ -237,10 +263,7 @@ class StorageService:
 
     def file_exists(self, storage_path: str) -> bool:
         """Check if a file exists in storage."""
-        if self.use_r2 and (
-            storage_path.startswith("r2://")
-            or (self.r2_public_url and storage_path.startswith(self.r2_public_url))
-        ):
+        if self.use_r2 and self.is_r2_path(storage_path):
             try:
                 if storage_path.startswith("r2://"):
                     key = storage_path.replace(f"r2://{self.r2_bucket_name}/", "")

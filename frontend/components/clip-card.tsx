@@ -7,12 +7,26 @@ import { Download, Play, Star } from 'lucide-react';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ClipResponse, getClipThumbnailUrl, getClipDownloadUrl } from '@/lib/api';
+import { ClipResponse, API_BASE_URL } from '@/lib/api';
 import Image from 'next/image';
 import Link from 'next/link';
 
 interface ClipCardProps {
   clip: ClipResponse;
+}
+
+/**
+ * Get the full URL for a clip resource.
+ * Uses the API-provided URL, prepending API_BASE_URL if it's a relative path.
+ */
+function getFullUrl(url: string): string {
+  if (!url) return '';
+  // If already absolute URL, return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // Otherwise, prepend API base URL
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 export function ClipCard({ clip }: ClipCardProps) {
@@ -29,7 +43,8 @@ export function ClipCard({ clip }: ClipCardProps) {
   };
 
   const handleDownload = () => {
-    const url = getClipDownloadUrl(clip.clip_id);
+    // Use API-provided download URL
+    const url = getFullUrl(clip.download_url);
     const link = document.createElement('a');
     link.href = url;
     link.download = `clip_${clip.clip_id}.mp4`;
@@ -38,11 +53,14 @@ export function ClipCard({ clip }: ClipCardProps) {
     document.body.removeChild(link);
   };
 
+  // Use API-provided thumbnail URL
+  const thumbnailUrl = getFullUrl(clip.thumbnail_url);
+
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
       <div className="relative aspect-9/16 bg-muted">
         <Image
-          src={getClipThumbnailUrl(clip.clip_id)}
+          src={thumbnailUrl}
           alt="Clip thumbnail"
           fill
           className="object-cover"

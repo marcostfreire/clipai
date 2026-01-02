@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # Storage (use /data/videos on Railway for persistent disk)
     storage_path: str = "./storage/videos"
-    max_video_size_mb: int = 500
-    max_video_duration_sec: int = 3600
+    max_video_size_mb: int = 2048  # 2GB - realistic for modern video quality
+    max_video_duration_sec: int = 7200  # 2 hours
 
     # Processing - optimized for Railway Hobby plan
     frames_per_second: float = 0.1  # 1 frame every 10 seconds (optimized for cost/performance)

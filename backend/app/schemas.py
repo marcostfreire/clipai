@@ -57,9 +57,9 @@ class VideoUploadResponse(BaseModel):
 class VideoProcessRequest(BaseModel):
     """Request schema for video processing."""
 
-    clip_duration_min: int = Field(default=30, ge=10, le=60)
-    clip_duration_max: int = Field(default=60, ge=30, le=120)
-    min_score: float = Field(default=7.0, ge=0, le=10)
+    clip_duration_min: Optional[int] = Field(default=None, ge=10, le=60)
+    clip_duration_max: Optional[int] = Field(default=None, ge=30, le=120)
+    min_score: Optional[float] = Field(default=None, ge=0, le=10)
 
 
 class VideoProcessResponse(BaseModel):

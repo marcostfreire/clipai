@@ -138,7 +138,7 @@ async def download_clip(clip_id: str, db: Session = Depends(get_db)):
         storage = get_storage_service()
         
         # If using R2 and path is R2 URL, redirect to it
-        if storage.use_r2 and (clip.file_path.startswith("r2://") or (storage.r2_public_url and clip.file_path.startswith(storage.r2_public_url))):
+        if storage.use_r2 and storage.is_r2_path(clip.file_path):
             # Get presigned or public URL
             url = storage.get_presigned_url(clip.file_path, expires_in=3600)
             return RedirectResponse(url=url, status_code=302)
@@ -181,7 +181,7 @@ async def get_clip_thumbnail(clip_id: str, db: Session = Depends(get_db)):
         storage = get_storage_service()
         
         # If using R2 and path is R2 URL, redirect to it
-        if storage.use_r2 and (clip.thumbnail_path.startswith("r2://") or (storage.r2_public_url and clip.thumbnail_path.startswith(storage.r2_public_url))):
+        if storage.use_r2 and storage.is_r2_path(clip.thumbnail_path):
             url = storage.get_presigned_url(clip.thumbnail_path, expires_in=3600)
             return RedirectResponse(url=url, status_code=302)
 

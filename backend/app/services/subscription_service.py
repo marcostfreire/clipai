@@ -7,7 +7,7 @@ from sqlalchemy import func, and_
 import stripe
 import logging
 
-from ..models import User, Video
+from ..models import User, Video, Clip
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Plan limits configuration
 PLAN_LIMITS = {
     "free": {
-        "videos_per_month": 2,
+        "videos_per_month": 1,
         "clips_per_video": 3,
         "max_video_duration_minutes": 30,
         "watermark": True,
@@ -40,20 +40,63 @@ PLAN_LIMITS = {
     },
 }
 
-# Stripe Price IDs mapping
-STRIPE_PRICE_TO_PLAN = {
-    # Free plan (R$0)
-    "price_1SUSZdCMwpJ5YuyfbFDEQh5A": "free",
-    # Starter plan (R$149/month)
-    "price_1SUSowCMwpJ5YuyfvZq5iXYZ": "starter",
-    # Pro plan (R$499/month)
-    "price_1SUSowCMwpJ5YuyfiRMdGv15": "pro",
-}
+
+def _build_stripe_price_to_plan_map() -> Dict[str, str]:
+    """
+    Build Stripe Price ID to Plan mapping from settings.
+    Uses config values if available, falls back to hardcoded defaults.
+    """
+    # Default hardcoded price IDs (fallback)
+    defaults = {
+        "price_1SUSZdCMwpJ5YuyfbFDEQh5A": "free",
+        "price_1SUSowCMwpJ5YuyfvZq5iXYZ": "starter",
+        "price_1SUSowCMwpJ5YuyfiRMdGv15": "pro",
+    }
+    
+    # Build from settings if configured
+    result = {}
+    
+    # Use settings if available, otherwise use defaults
+    if settings.stripe_price_free:
+        result[settings.stripe_price_free] = "free"
+    if settings.stripe_price_starter:
+        result[settings.stripe_price_starter] = "starter"
+    if settings.stripe_price_pro:
+        result[settings.stripe_price_pro] = "pro"
+    
+    # If no settings configured, use defaults
+    if not result:
+        return defaults
+    
+    # Merge defaults for any missing price IDs (backwards compatibility)
+    for price_id, plan in defaults.items():
+        if price_id not in result:
+            result[price_id] = plan
+    
+    return result
+
+
+def get_stripe_price_to_plan_map() -> Dict[str, str]:
+    """Get the Stripe Price ID to Plan mapping."""
+    return _build_stripe_price_to_plan_map()
+
+
+# For backwards compatibility - lazy-loaded
+STRIPE_PRICE_TO_PLAN = None
+
+
+def _get_stripe_price_map() -> Dict[str, str]:
+    """Get or build the stripe price map."""
+    global STRIPE_PRICE_TO_PLAN
+    if STRIPE_PRICE_TO_PLAN is None:
+        STRIPE_PRICE_TO_PLAN = _build_stripe_price_to_plan_map()
+    return STRIPE_PRICE_TO_PLAN
 
 
 def get_plan_from_price_id(price_id: str) -> str:
     """Get plan name from Stripe price ID."""
-    return STRIPE_PRICE_TO_PLAN.get(price_id, "free")
+    price_map = _get_stripe_price_map()
+    return price_map.get(price_id, "free")
 
 
 def get_user_plan(user: Optional[User]) -> str:
@@ -93,20 +136,29 @@ def get_plan_limits(plan: str) -> Dict[str, Any]:
 
 def count_user_videos_this_month(db: Session, user_id: str) -> int:
     """
-    Count how many videos a user has processed this month.
+    Count how many SUCCESSFUL videos a user has processed this month.
     
-    Counts videos that are queued, processing, or completed.
+    IMPORTANT: Only counts videos that:
+    - Status = "completed" AND have at least 1 clip generated
+    
+    Videos that failed or generated 0 clips do NOT count against the limit.
+    This ensures users aren't penalized for processing failures.
     """
+    from sqlalchemy import exists
+    
     # Get first day of current month
     today = datetime.utcnow()
     first_day_of_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    # Count videos created this month by this user
+    # Count only completed videos that have at least 1 clip
+    # Using a subquery to check if clips exist for each video
     count = db.query(func.count(Video.id)).filter(
         and_(
             Video.user_id == user_id,
             Video.created_at >= first_day_of_month,
-            Video.status.in_(["queued", "processing", "completed"])
+            Video.status == "completed",
+            # Only count if video has at least 1 clip
+            exists().where(Clip.video_id == Video.id)
         )
     ).scalar()
     
@@ -132,15 +184,16 @@ def check_video_upload_allowed(
     limits = get_plan_limits(plan)
     video_limit = limits["videos_per_month"]
     
-    # Anonymous users get free tier limits but can't track usage
+    # Anonymous users must login to upload
     if not user:
         return {
-            "allowed": True,  # Allow anonymous uploads but with free tier features
+            "allowed": False,
+            "reason": "Faça login para enviar vídeos",
             "plan": "free",
             "used": 0,
             "limit": video_limit,
-            "remaining": video_limit,
-            "message": "Faça login para acompanhar seu uso",
+            "remaining": 0,
+            "requires_login": True,
         }
     
     # Count videos this month

@@ -36,7 +36,14 @@ async def stripe_webhook(
     sig_header = request.headers.get("stripe-signature")
 
     if not settings.stripe_webhook_secret:
-        logger.warning("Stripe webhook secret not configured - skipping signature verification")
+        logger.warning(
+            "\n" + "=" * 60 + "\n"
+            "⚠️  SECURITY WARNING: Stripe webhook secret not configured!\n"
+            "Webhook signature verification is DISABLED.\n"
+            "In PRODUCTION, set STRIPE_WEBHOOK_SECRET environment variable.\n"
+            "This allows anyone to send fake webhook events!\n"
+            "=" * 60 + "\n"
+        )
         # In development, we can skip signature verification
         # In production, this should be properly configured
         try:

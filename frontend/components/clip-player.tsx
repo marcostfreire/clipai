@@ -8,12 +8,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ClipResponse, getClipDownloadUrl } from '@/lib/api';
+import { ClipResponse, API_BASE_URL } from '@/lib/api';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface ClipPlayerProps {
   clip: ClipResponse;
+}
+
+/**
+ * Get the full URL for a clip resource.
+ * Uses the API-provided URL, prepending API_BASE_URL if it's a relative path.
+ */
+function getFullUrl(url: string): string {
+  if (!url) return '';
+  // If already absolute URL, return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // Otherwise, prepend API base URL
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 export function ClipPlayer({ clip }: ClipPlayerProps) {
@@ -26,7 +40,8 @@ export function ClipPlayer({ clip }: ClipPlayerProps) {
   };
 
   const handleDownload = () => {
-    const url = getClipDownloadUrl(clip.clip_id);
+    // Use API-provided download URL
+    const url = getFullUrl(clip.download_url);
     const link = document.createElement('a');
     link.href = url;
     link.download = `clip_${clip.clip_id}.mp4`;
@@ -72,7 +87,7 @@ export function ClipPlayer({ clip }: ClipPlayerProps) {
           <video
             controls
             className="w-full aspect-9/16g-black"
-            src={getClipDownloadUrl(clip.clip_id)}
+            src={getFullUrl(clip.download_url)}
           />
         </CardContent>
       </Card>

@@ -187,9 +187,9 @@ async def upload_video(
                     logger.info(f"[VIDEO:{video_id}] Metadata: {video_title}, {video_duration}s, ~{estimated_size_mb:.0f}MB estimated")
                     
                     # Check limits BEFORE downloading
-                    # Vercel free tier has 30s timeout, download at ~7MB/s = 200MB max
-                    MAX_DOWNLOAD_SIZE_MB = 200
-                    MAX_DURATION_SECONDS = 20 * 60  # 20 minutes
+                    # Railway has no timeout issues, allow larger downloads
+                    MAX_DOWNLOAD_SIZE_MB = 1024  # 1GB for URL downloads
+                    MAX_DURATION_SECONDS = 60 * 60  # 60 minutes
                     
                     if estimated_size_mb > MAX_DOWNLOAD_SIZE_MB:
                         if os.path.exists(video_dir):
@@ -198,7 +198,7 @@ async def upload_video(
                             status_code=400,
                             detail={
                                 "error": "video_too_large",
-                                "message": f"Vídeo muito grande para download via URL (~{estimated_size_mb:.0f}MB). Limite: {MAX_DOWNLOAD_SIZE_MB}MB. Para vídeos maiores, baixe manualmente e faça upload do arquivo.",
+                                "message": f"Vídeo muito grande (~{estimated_size_mb:.0f}MB). Limite para URL: {MAX_DOWNLOAD_SIZE_MB}MB ({MAX_DOWNLOAD_SIZE_MB/1024:.1f}GB). Para vídeos maiores, baixe e faça upload.",
                                 "estimated_size_mb": round(estimated_size_mb),
                                 "max_size_mb": MAX_DOWNLOAD_SIZE_MB,
                                 "video_title": video_title,
@@ -353,9 +353,27 @@ async def upload_chunk(
     filename: str = Form(...),
     upload_id: str = Form(...),
     chunk: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Upload a single chunk of a video file."""
     try:
+        # Check subscription limits on first chunk only
+        if chunk_index == 0:
+            limit_check = check_video_upload_allowed(db, current_user)
+            if not limit_check["allowed"]:
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "error": "subscription_limit_reached",
+                        "message": limit_check["reason"],
+                        "plan": limit_check["plan"],
+                        "used": limit_check["used"],
+                        "limit": limit_check["limit"],
+                        "upgrade_url": limit_check.get("upgrade_url", "/pricing"),
+                    }
+                )
+        
         # Create temp directory for this upload
         temp_dir = os.path.join(settings.storage_path, ".chunks", upload_id)
         os.makedirs(temp_dir, exist_ok=True)
@@ -372,6 +390,8 @@ async def upload_chunk(
             "chunk_index": chunk_index,
             "upload_id": upload_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading chunk: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -387,6 +407,21 @@ async def complete_chunked_upload(
 ):
     """Combine all chunks into final video file."""
     try:
+        # Re-check subscription limits before completing
+        limit_check = check_video_upload_allowed(db, current_user)
+        if not limit_check["allowed"]:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "subscription_limit_reached",
+                    "message": limit_check["reason"],
+                    "plan": limit_check["plan"],
+                    "used": limit_check["used"],
+                    "limit": limit_check["limit"],
+                    "upgrade_url": limit_check.get("upgrade_url", "/pricing"),
+                }
+            )
+        
         temp_dir = os.path.join(settings.storage_path, ".chunks", upload_id)
         
         # Verify all chunks exist
@@ -414,18 +449,44 @@ async def complete_chunked_upload(
         # Clean up chunks
         shutil.rmtree(temp_dir)
         
+        # Get file size (required field)
+        file_size = os.path.getsize(file_path)
+        
         # Get video info
         ffmpeg = FFmpegService()
         video_info = ffmpeg.get_video_info(file_path)
         duration = video_info.get('duration', 0)
         
-        # Create database entry
+        # Check duration limit based on user's plan
+        plan = get_user_plan(current_user)
+        plan_limits = get_plan_limits(plan)
+        max_duration_sec = plan_limits["max_video_duration_minutes"] * 60
+        
+        if duration > max_duration_sec:
+            # Clean up files before rejecting
+            os.remove(file_path)
+            os.rmdir(video_dir)
+            max_minutes = plan_limits["max_video_duration_minutes"]
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "video_too_long",
+                    "message": f"Vídeo muito longo. Máximo permitido no plano {plan.title()}: {max_minutes} minutos",
+                    "max_duration_minutes": max_minutes,
+                    "video_duration_minutes": round(duration / 60, 1),
+                    "plan": plan,
+                    "upgrade_url": "/pricing" if plan != "pro" else None,
+                }
+            )
+        
+        # Create database entry with all required fields and correct status
         video = Video(
             id=video_id,
             filename=filename,
             file_path=file_path,
+            file_size=file_size,  # Required field was missing!
             duration=duration,
-            status="uploaded",
+            status="queued",  # Use 'queued' consistently, not 'uploaded'
             user_id=current_user.id if current_user else None,
         )
         db.add(video)
@@ -435,9 +496,8 @@ async def complete_chunked_upload(
         
         return VideoUploadResponse(
             video_id=video_id,
-            filename=filename,
-            duration=duration,
-            status="uploaded",
+            status="queued",
+            message="Video uploaded successfully",
         )
     except HTTPException:
         raise
@@ -476,6 +536,16 @@ async def process_video(
 
         if video.status == "completed":
             raise HTTPException(status_code=400, detail="Video already processed")
+        
+        if video.status == "failed":
+            # Reset status to allow reprocessing of failed videos
+            video.status = "queued"
+            video.error_message = None
+            video.progress = 0
+            db.commit()
+
+        # Accept 'queued' and 'uploaded' (legacy from old chunk upload)
+        # Other statuses are rejected above
 
         # Queue processing task with custom parameters
         from ..tasks.celery_tasks import process_video_task

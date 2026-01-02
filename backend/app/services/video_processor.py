@@ -19,7 +19,7 @@ class VideoProcessor:
         frames_per_second: float = 0.1,  # Optimized: 1 frame every 10 seconds
         clip_min_duration: int = 30,
         clip_max_duration: int = 60,
-        min_virality_score: float = 5.0,
+        min_virality_score: float = 3.0,  # Matches config.settings default
         subtitle_delay_seconds: float = 0.0,
     ):
         """
